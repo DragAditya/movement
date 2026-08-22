@@ -4,6 +4,7 @@ const dbMocks = vi.hoisted(() => ({
   createAlbum: vi.fn(),
   updateAlbum: vi.fn(),
   deleteAlbum: vi.fn(),
+  permanentlyDeleteImages: vi.fn(),
   setAlbumImages: vi.fn(),
   reorderAlbums: vi.fn(),
   getAlbumDashboard: vi.fn(),
@@ -23,6 +24,7 @@ describe("album management procedures", () => {
     dbMocks.setAlbumImages.mockResolvedValue(undefined);
     dbMocks.reorderAlbums.mockResolvedValue(undefined);
     dbMocks.deleteAlbum.mockResolvedValue(undefined);
+    dbMocks.permanentlyDeleteImages.mockResolvedValue(undefined);
   });
 
   it("creates a custom album with presentation and visibility settings", async () => {
@@ -41,5 +43,10 @@ describe("album management procedures", () => {
   it("deletes an album while leaving image deletion to the data layer contract", async () => {
     await expect(appRouter.createCaller(context).gallery.deleteAlbum({ albumId: 4 })).resolves.toEqual({ success: true });
     expect(dbMocks.deleteAlbum).toHaveBeenCalledWith(4);
+  });
+
+  it("permanently deletes selected image records through the gallery data contract", async () => {
+    await expect(appRouter.createCaller(context).gallery.deleteImages({ imageIds: [8, 5] })).resolves.toEqual({ success: true, deletedCount: 2 });
+    expect(dbMocks.permanentlyDeleteImages).toHaveBeenCalledWith([8, 5]);
   });
 });

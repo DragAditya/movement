@@ -36,6 +36,7 @@ export const appRouter = router({
       return db.updateAlbum(albumId, changes);
     }),
     deleteAlbum: publicProcedure.input(z.object({ albumId: z.number().int().positive() })).mutation(async ({ input }) => { await db.deleteAlbum(input.albumId); return { success: true }; }),
+    deleteImages: publicProcedure.input(z.object({ imageIds: z.array(z.number().int().positive()).min(1) })).mutation(async ({ input }) => { await db.permanentlyDeleteImages(input.imageIds); return { success: true, deletedCount: input.imageIds.length }; }),
     setAlbumImages: publicProcedure.input(z.object({ albumId: z.number().int().positive(), imageIds: z.array(z.number().int().positive()) })).mutation(async ({ input }) => { await db.setAlbumImages(input.albumId, input.imageIds); return { success: true }; }),
     reorderAlbums: publicProcedure.input(z.object({ albumIds: z.array(z.number().int().positive()).min(1) })).mutation(async ({ input }) => { await db.reorderAlbums(input.albumIds); return { success: true }; }),
   }),

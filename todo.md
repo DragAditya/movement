@@ -42,3 +42,7 @@
 - [x] Add membership-rule tests and verify the updated Library and album behavior on desktop and mobile.
 - [x] Add focused coverage for exclusive reassignment and permanent All Images immutability.
 - [x] Verify live procedure rejection for update, delete, reorder, and membership changes on the permanent All Images album.
+- [x] Remove the New album control from the Library page while retaining album creation in the Albums workspace.
+- [x] Add a permanent delete action beside Clear for selected unassigned images, including a confirmation and data cleanup.
+- [x] Remove image selection from the album editor so it can only edit album metadata and cannot transfer images between albums.
+- [x] Test and verify the simplified Library bulk actions and album ownership behavior on mobile and desktop.

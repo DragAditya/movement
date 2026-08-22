@@ -144,6 +144,14 @@ export async function deleteAlbum(albumId: number) {
   await db.delete(albums).where(eq(albums.id, albumId));
 }
 
+export async function permanentlyDeleteImages(imageIds: number[]) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  if (!imageIds.length) return;
+  await db.delete(albumImages).where(inArray(albumImages.imageId, imageIds));
+  await db.delete(galleryImages).where(inArray(galleryImages.id, imageIds));
+}
+
 export async function setAlbumImages(albumId: number, imageIds: number[]) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
