@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { boolean, int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -25,4 +25,59 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-// TODO: Add your tables here
+export const collections = mysqlTable("collections", {
+  id: int("id").autoincrement().primaryKey(),
+  slug: varchar("slug", { length: 120 }).notNull().unique(),
+  name: varchar("name", { length: 180 }).notNull(),
+  description: text("description"),
+  coverImageUrl: text("coverImageUrl"),
+  visibility: mysqlEnum("visibility", ["public", "private"]).default("public").notNull(),
+  sharingMode: mysqlEnum("sharingMode", ["standard", "immersive", "kiosk"]).default("immersive").notNull(),
+  sortOrder: int("sortOrder").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export const galleryImages = mysqlTable("galleryImages", {
+  id: int("id").autoincrement().primaryKey(),
+  collectionId: int("collectionId"),
+  originalKey: varchar("originalKey", { length: 512 }).notNull(),
+  originalUrl: text("originalUrl").notNull(),
+  thumbnailUrl: text("thumbnailUrl"),
+  filename: varchar("filename", { length: 255 }).notNull(),
+  mimeType: varchar("mimeType", { length: 100 }).notNull(),
+  fileSize: int("fileSize").notNull(),
+  width: int("width"),
+  height: int("height"),
+  caption: text("caption"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const slideshowSettings = mysqlTable("slideshowSettings", {
+  id: int("id").autoincrement().primaryKey(),
+  autoplay: boolean("autoplay").default(true).notNull(),
+  loop: boolean("loop").default(true).notNull(),
+  intervalSeconds: int("intervalSeconds").default(5).notNull(),
+  transition: mysqlEnum("transition", ["fade", "crossfade", "slide", "instant"]).default("crossfade").notNull(),
+  transitionSpeed: int("transitionSpeed").default(400).notNull(),
+  background: varchar("background", { length: 24 }).default("near-black").notNull(),
+  imageFit: mysqlEnum("imageFit", ["contain", "cover"]).default("contain").notNull(),
+  showControls: boolean("showControls").default(true).notNull(),
+  showCounter: boolean("showCounter").default(true).notNull(),
+  showCaptions: boolean("showCaptions").default(true).notNull(),
+  swipeEnabled: boolean("swipeEnabled").default(true).notNull(),
+  keyboardEnabled: boolean("keyboardEnabled").default(true).notNull(),
+  tapNavigationEnabled: boolean("tapNavigationEnabled").default(true).notNull(),
+  defaultMode: mysqlEnum("defaultMode", ["standard", "immersive", "kiosk"]).default("immersive").notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export const activityEvents = mysqlTable("activityEvents", {
+  id: int("id").autoincrement().primaryKey(),
+  eventType: varchar("eventType", { length: 96 }).notNull(),
+  description: text("description").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type GalleryCollection = typeof collections.$inferSelect;
+export type GalleryImage = typeof galleryImages.$inferSelect;

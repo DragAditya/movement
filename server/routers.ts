@@ -2,6 +2,10 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
+import { z } from "zod";
+
+const sharingMode = z.enum(["standard", "immersive", "kiosk"]);
+const slideshowMode = z.enum(["fade", "crossfade", "slide", "instant"]);
 
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -16,13 +20,11 @@ export const appRouter = router({
       } as const;
     }),
   }),
-
-  // TODO: add feature routers here, e.g.
-  // todo: router({
-  //   list: protectedProcedure.query(({ ctx }) =>
-  //     db.getUserTodos(ctx.user.id)
-  //   ),
-  // }),
+  gallery: router({
+    publicShare: publicProcedure.input(z.object({ slug: z.string().min(1) })).query(({ input }) => ({ slug: input.slug, public: true })),
+    validateCollection: publicProcedure.input(z.object({ name: z.string().min(1).max(180), mode: sharingMode })).query(({ input }) => ({ ...input, valid: true })),
+    validateSlideshowSettings: publicProcedure.input(z.object({ intervalSeconds: z.number().int().min(2).max(60), transition: slideshowMode, kiosk: z.boolean() })).query(({ input }) => ({ ...input, valid: true })),
+  }),
 });
 
 export type AppRouter = typeof appRouter;

@@ -1,6 +1,10 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import Admin from "@/pages/Admin";
+import CollectionDetail from "@/pages/CollectionDetail";
+import Collections from "@/pages/Collections";
 import NotFound from "@/pages/NotFound";
+import SharedSlideshow from "@/pages/SharedSlideshow";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -11,6 +15,10 @@ function Router() {
   return (
     <Switch>
       <Route path={"/"} component={Home} />
+      <Route path={"/collections"} component={Collections} />
+      <Route path={"/collections/:slug"} component={CollectionDetail} />
+      <Route path={"/s/:slug"} component={SharedSlideshow} />
+      <Route path={"/manage"} component={Admin} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />
