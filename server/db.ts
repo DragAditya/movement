@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { collections, galleryImages, InsertUser, users } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -89,4 +89,54 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
+export type GalleryImageInput = {
+  originalKey: string;
+  originalUrl: string;
+  filename: string;
+  mimeType: string;
+  fileSize: number;
+  width?: number;
+  height?: number;
+};
+
+export async function createGalleryImage(input: GalleryImageInput) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const result = await db.insert(galleryImages).values(input);
+  const imageId = Number((result as unknown as { insertId: number }).insertId);
+  const [image] = await db.select().from(galleryImages).where(eq(galleryImages.id, imageId)).limit(1);
+  return image;
+}
+
+export async function createGalleryCollection(input: { slug: string; name: string; description?: string; coverImageUrl?: string; sharingMode: "standard" | "immersive" | "kiosk" }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const result = await db.insert(collections).values(input);
+  const collectionId = Number((result as unknown as { insertId: number }).insertId);
+  const [collection] = await db.select().from(collections).where(eq(collections.id, collectionId)).limit(1);
+  return collection;
+}
+
+export async function assignGalleryImagesToCollection(imageIds: number[], collectionId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  if (!imageIds.length) return 0;
+  const result = await db.update(galleryImages).set({ collectionId }).where(inArray(galleryImages.id, imageIds));
+  return Number((result as unknown as { affectedRows: number }).affectedRows ?? imageIds.length);
+}
+
+export async function getGalleryDashboard() {
+  const db = await getDb();
+  if (!db) return { collections: [], uncategorized: [], assigned: [] };
+  const [collectionRows, imageRows] = await Promise.all([
+    db.select().from(collections).orderBy(collections.sortOrder, collections.createdAt),
+    db.select().from(galleryImages),
+  ]);
+  const counts = new Map<number, number>();
+  imageRows.forEach(image => { if (image.collectionId) counts.set(image.collectionId, (counts.get(image.collectionId) ?? 0) + 1); });
+  return {
+    collections: collectionRows.map(collection => ({ ...collection, imageCount: counts.get(collection.id) ?? 0 })),
+    uncategorized: imageRows.filter(image => image.collectionId === null),
+    assigned: imageRows.filter(image => image.collectionId !== null),
+  };
+}

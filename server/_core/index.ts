@@ -10,6 +10,7 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { storagePut } from "../storage";
 import { nanoid } from "nanoid";
+import { createGalleryImage } from "../db";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -45,9 +46,12 @@ async function startServer() {
     }
     const rawName = typeof req.headers["x-file-name"] === "string" ? req.headers["x-file-name"] : "image";
     const filename = decodeURIComponent(rawName).replace(/[^a-zA-Z0-9._-]/g, "-");
+    const width = Number(req.headers["x-image-width"] ?? 0) || undefined;
+    const height = Number(req.headers["x-image-height"] ?? 0) || undefined;
     try {
       const stored = await storagePut(`gallery/originals/${nanoid()}-${filename}`, req.body, contentType);
-      res.status(201).json({ key: stored.key, url: stored.url, original: true });
+      const image = await createGalleryImage({ originalKey: stored.key, originalUrl: stored.url, filename, mimeType: contentType, fileSize: req.body.length, width, height });
+      res.status(201).json({ key: stored.key, url: stored.url, original: true, imageId: image?.id });
     } catch (error) {
       console.error("[Upload] Failed to store image", error);
       res.status(500).json({ error: "Image storage was unavailable. Please retry." });

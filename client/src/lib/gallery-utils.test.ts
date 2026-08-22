@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isSupportedImageUpload, nextSlideIndex, toggleGallerySelection } from "./gallery-utils";
+import { assignImagesToCollection, isSupportedImageUpload, nextSlideIndex, toggleGallerySelection } from "./gallery-utils";
 
 describe("gallery interaction utilities", () => {
   it("cycles slideshow indices in both directions", () => {
@@ -17,5 +17,14 @@ describe("gallery interaction utilities", () => {
   it("adds and removes images from a bulk selection", () => {
     expect(toggleGallerySelection(["a"], "b")).toEqual(["a", "b"]);
     expect(toggleGallerySelection(["a", "b"], "a")).toEqual(["b"]);
+  });
+
+  it("moves selected images into the chosen existing collection without dropping them", () => {
+    const result = assignImagesToCollection([
+      { id: "one", collection: "uncategorized" },
+      { id: "two", collection: "uncategorized" },
+    ], ["two"], "padmavati");
+    expect(result.remaining).toEqual([{ id: "one", collection: "uncategorized" }]);
+    expect(result.moved).toEqual([{ id: "two", collection: "padmavati" }]);
   });
 });

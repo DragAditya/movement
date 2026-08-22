@@ -16,3 +16,7 @@
 - [x] Add responsive image delivery, lazy/progressive loading, skeletons, error recovery, empty states, and grid-level performance safeguards.
 - [x] Add and run unit tests for gallery behavior and data contracts.
 - [x] Verify the desktop and mobile interface visually, then save a final completed checkpoint.
+- [x] Fix collection moves so selected images are assigned to an existing category and remain visible after the move.
+- [x] Restrict collection creation to the Categories tab and remove collection-creation prompts from upload management.
+- [x] Add automated coverage for collection assignment and verify the corrected desktop and mobile flows.
+- [x] Persist created categories and uploaded image-to-category assignments so the repaired collection state survives a refresh.
