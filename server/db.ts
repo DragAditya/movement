@@ -1,6 +1,6 @@
-import { eq, inArray } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { collections, galleryImages, InsertUser, users } from "../drizzle/schema";
+import { albumImages, albums, galleryImages, InsertUser, users } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -99,44 +99,68 @@ export type GalleryImageInput = {
   height?: number;
 };
 
+export type SmartGroup = "personal" | "screens" | "projects";
+
+export function classifyImage(input: { filename: string; mimeType: string; width?: number; height?: number }): SmartGroup {
+  const name = input.filename.toLowerCase();
+  if (/(screenshot|screen[-_ ]?shot|screencap|screen[-_ ]?capture|^screen[-_ ])/.test(name)) return "screens";
+  if (/(app|ui|mockup|design|figma|wireframe|dashboard|interface|prototype)/.test(name)) return "projects";
+  if (input.mimeType === "image/png" && (input.width ?? 0) >= 800 && (input.height ?? 0) >= 500) return "screens";
+  if ((input.width ?? 0) >= (input.height ?? 0) * 1.7 && (input.width ?? 0) >= 1200) return "projects";
+  return "personal";
+}
+
 export async function createGalleryImage(input: GalleryImageInput) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
-  const result = await db.insert(galleryImages).values(input);
-  const imageId = Number((result as unknown as { insertId: number }).insertId);
-  const [image] = await db.select().from(galleryImages).where(eq(galleryImages.id, imageId)).limit(1);
+  await db.insert(galleryImages).values({ ...input, smartGroup: classifyImage(input) });
+  const [image] = await db.select().from(galleryImages).where(eq(galleryImages.originalKey, input.originalKey)).limit(1);
   return image;
 }
 
-export async function createGalleryCollection(input: { slug: string; name: string; description?: string; coverImageUrl?: string; sharingMode: "standard" | "immersive" | "kiosk" }) {
+export async function createAlbum(input: { slug: string; name: string; description?: string; coverImageId?: number; visibility: "public" | "private"; presentationMode: "standard" | "immersive" | "kiosk"; accent: string; sortOrder: number }) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
-  const result = await db.insert(collections).values(input);
-  const collectionId = Number((result as unknown as { insertId: number }).insertId);
-  const [collection] = await db.select().from(collections).where(eq(collections.id, collectionId)).limit(1);
-  return collection;
+  await db.insert(albums).values(input);
+  const [album] = await db.select().from(albums).where(eq(albums.slug, input.slug)).limit(1);
+  return album;
 }
 
-export async function assignGalleryImagesToCollection(imageIds: number[], collectionId: number) {
+export async function updateAlbum(albumId: number, input: Partial<{ name: string; description: string; coverImageId: number | null; visibility: "public" | "private"; presentationMode: "standard" | "immersive" | "kiosk"; accent: string; sortOrder: number }>) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
-  if (!imageIds.length) return 0;
-  const result = await db.update(galleryImages).set({ collectionId }).where(inArray(galleryImages.id, imageIds));
-  return Number((result as unknown as { affectedRows: number }).affectedRows ?? imageIds.length);
+  await db.update(albums).set(input).where(eq(albums.id, albumId));
+  const [album] = await db.select().from(albums).where(eq(albums.id, albumId)).limit(1);
+  return album;
 }
 
-export async function getGalleryDashboard() {
+export async function deleteAlbum(albumId: number) {
   const db = await getDb();
-  if (!db) return { collections: [], uncategorized: [], assigned: [] };
-  const [collectionRows, imageRows] = await Promise.all([
-    db.select().from(collections).orderBy(collections.sortOrder, collections.createdAt),
-    db.select().from(galleryImages),
+  if (!db) throw new Error("Database unavailable");
+  await db.delete(albumImages).where(eq(albumImages.albumId, albumId));
+  await db.delete(albums).where(eq(albums.id, albumId));
+}
+
+export async function setAlbumImages(albumId: number, imageIds: number[]) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.delete(albumImages).where(eq(albumImages.albumId, albumId));
+  if (imageIds.length) await db.insert(albumImages).values(imageIds.map((imageId, index) => ({ albumId, imageId, source: "manual" as const, sortOrder: index })));
+}
+
+export async function reorderAlbums(albumIds: number[]) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await Promise.all(albumIds.map((albumId, index) => db.update(albums).set({ sortOrder: index }).where(eq(albums.id, albumId))));
+}
+
+export async function getAlbumDashboard() {
+  const db = await getDb();
+  if (!db) return { albums: [], images: [], memberships: [] };
+  const [albumRows, imageRows, membershipRows] = await Promise.all([
+    db.select().from(albums).orderBy(albums.sortOrder, albums.createdAt),
+    db.select().from(galleryImages).orderBy(desc(galleryImages.createdAt)),
+    db.select().from(albumImages).orderBy(albumImages.sortOrder),
   ]);
-  const counts = new Map<number, number>();
-  imageRows.forEach(image => { if (image.collectionId) counts.set(image.collectionId, (counts.get(image.collectionId) ?? 0) + 1); });
-  return {
-    collections: collectionRows.map(collection => ({ ...collection, imageCount: counts.get(collection.id) ?? 0 })),
-    uncategorized: imageRows.filter(image => image.collectionId === null),
-    assigned: imageRows.filter(image => image.collectionId !== null),
-  };
+  return { albums: albumRows, images: imageRows, memberships: membershipRows };
 }

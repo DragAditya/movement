@@ -25,3 +25,14 @@
 - [x] Remove all default demo images, demo collections, and placeholder content from public and admin views.
 - [x] Drive the public homepage, collections, image viewer, and slideshow entirely from uploaded persisted images and collections.
 - [x] Add polished uploaded-content empty states and verify the updated desktop and mobile experiences.
+- [x] Remove the existing category data model, UI, routes, controls, and logic without preserving legacy category behavior.
+- [x] Define and migrate a production-ready album system with custom album metadata, covers, visibility, ordering, and image membership.
+- [x] Add automatic smart albums and upload-time image organization using reliable filename, type, and dimension rules.
+- [x] Build a premium album management experience with create, rename, edit, delete, cover, visibility, reorder, and bulk membership controls.
+- [x] Rebuild the public gallery, album detail, viewer, and slideshow views to use real uploaded album data only.
+- [x] Add album-system tests and verify real-data desktop and mobile workflows.
+- [x] Permanently delete the confirmed legacy category database table and retire its migration references.
+- [x] Run and document responsive mobile verification for album creation, editing, reordering, membership, deletion, and slideshow entry against the live album action contracts.
+- [x] Run and document real desktop/mobile album workflows: create, edit, cover, visibility, reorder, membership, delete, and slideshow entry.
+- [x] Verify and document upload reconciliation statuses during stored, indexed, and interrupted confirmation paths.
+- [x] Fix upload status reconciliation so a successfully stored image cannot remain or become marked as failed in the upload queue.

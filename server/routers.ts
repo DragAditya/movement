@@ -5,7 +5,8 @@ import { publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import * as db from "./db";
 
-const sharingMode = z.enum(["standard", "immersive", "kiosk"]);
+const presentationMode = z.enum(["standard", "immersive", "kiosk"]);
+const visibility = z.enum(["public", "private"]);
 const slideshowMode = z.enum(["fade", "crossfade", "slide", "instant"]);
 
 export const appRouter = router({
@@ -22,17 +23,21 @@ export const appRouter = router({
     }),
   }),
   gallery: router({
-    publicShare: publicProcedure.input(z.object({ slug: z.string().min(1) })).query(({ input }) => ({ slug: input.slug, public: true })),
-    publicDashboard: publicProcedure.query(() => db.getGalleryDashboard()),
-    validateCollection: publicProcedure.input(z.object({ name: z.string().min(1).max(180), mode: sharingMode })).query(({ input }) => ({ ...input, valid: true })),
+    publicDashboard: publicProcedure.query(() => db.getAlbumDashboard()),
+    validateAlbum: publicProcedure.input(z.object({ name: z.string().min(1).max(180), mode: presentationMode })).query(({ input }) => ({ ...input, valid: true })),
     validateSlideshowSettings: publicProcedure.input(z.object({ intervalSeconds: z.number().int().min(2).max(60), transition: slideshowMode, kiosk: z.boolean() })).query(({ input }) => ({ ...input, valid: true })),
-    adminDashboard: publicProcedure.query(() => db.getGalleryDashboard()),
-    createCollection: publicProcedure.input(z.object({ name: z.string().min(1).max(180), description: z.string().max(500).optional(), coverImageUrl: z.string().optional(), mode: sharingMode })).mutation(async ({ input }) => {
+    adminDashboard: publicProcedure.query(() => db.getAlbumDashboard()),
+    createAlbum: publicProcedure.input(z.object({ name: z.string().min(1).max(180), description: z.string().max(500).optional(), coverImageId: z.number().int().positive().optional(), visibility, presentationMode, accent: z.string().max(24) })).mutation(async ({ input }) => {
       const slug = `${input.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}-${Date.now().toString(36)}`;
-      const collection = await db.createGalleryCollection({ slug, name: input.name.trim(), description: input.description, coverImageUrl: input.coverImageUrl, sharingMode: input.mode });
-      return collection;
+      return db.createAlbum({ slug, name: input.name.trim(), description: input.description, coverImageId: input.coverImageId, visibility: input.visibility, presentationMode: input.presentationMode, accent: input.accent, sortOrder: 0 });
     }),
-    moveImages: publicProcedure.input(z.object({ imageIds: z.array(z.number().int().positive()).min(1), collectionId: z.number().int().positive() })).mutation(async ({ input }) => ({ updated: await db.assignGalleryImagesToCollection(input.imageIds, input.collectionId) })),
+    updateAlbum: publicProcedure.input(z.object({ albumId: z.number().int().positive(), name: z.string().min(1).max(180).optional(), description: z.string().max(500).optional(), coverImageId: z.number().int().positive().nullable().optional(), visibility: visibility.optional(), presentationMode: presentationMode.optional(), accent: z.string().max(24).optional() })).mutation(({ input }) => {
+      const { albumId, ...changes } = input;
+      return db.updateAlbum(albumId, changes);
+    }),
+    deleteAlbum: publicProcedure.input(z.object({ albumId: z.number().int().positive() })).mutation(async ({ input }) => { await db.deleteAlbum(input.albumId); return { success: true }; }),
+    setAlbumImages: publicProcedure.input(z.object({ albumId: z.number().int().positive(), imageIds: z.array(z.number().int().positive()) })).mutation(async ({ input }) => { await db.setAlbumImages(input.albumId, input.imageIds); return { success: true }; }),
+    reorderAlbums: publicProcedure.input(z.object({ albumIds: z.array(z.number().int().positive()).min(1) })).mutation(async ({ input }) => { await db.reorderAlbums(input.albumIds); return { success: true }; }),
   }),
 });
 

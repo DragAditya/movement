@@ -1,8 +1,8 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Admin from "@/pages/Admin";
-import CollectionDetail from "@/pages/CollectionDetail";
-import Collections from "@/pages/Collections";
+import AlbumDetail from "@/pages/AlbumDetail";
+import Albums from "@/pages/Albums";
 import NotFound from "@/pages/NotFound";
 import SharedSlideshow from "@/pages/SharedSlideshow";
 import { Route, Switch } from "wouter";
@@ -15,8 +15,8 @@ function Router() {
   return (
     <Switch>
       <Route path={"/"} component={Home} />
-      <Route path={"/collections"} component={Collections} />
-      <Route path={"/collections/:slug"} component={CollectionDetail} />
+      <Route path={"/albums"} component={Albums} />
+      <Route path={"/albums/:slug"} component={AlbumDetail} />
       <Route path={"/s/:slug"} component={SharedSlideshow} />
       <Route path={"/manage"} component={Admin} />
       <Route path={"/404"} component={NotFound} />

@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 
 type AppHeaderProps = {
   mode: "gallery" | "admin";
-  active?: "home" | "collections";
+  active?: "home" | "albums";
 };
 
 export default function AppHeader({ mode, active }: AppHeaderProps) {
@@ -13,7 +13,7 @@ export default function AppHeader({ mode, active }: AppHeaderProps) {
     <div className="app-header-right">
       <nav className="app-page-nav" aria-label="Gallery navigation">
         <button className={active === "home" ? "active" : ""} onClick={() => navigate("/")}>Home</button>
-        <button className={active === "collections" ? "active" : ""} onClick={() => navigate("/collections")}>Collections</button>
+        <button className={active === "albums" ? "active" : ""} onClick={() => navigate("/albums")}>Albums</button>
       </nav>
       <div className="mode-switch" aria-label="Application mode">
         <button className={mode === "gallery" ? "active" : ""} onClick={() => navigate("/")}><LayoutGrid size={14} /> Gallery</button>

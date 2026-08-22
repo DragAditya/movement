@@ -50,11 +50,30 @@ async function startServer() {
     const height = Number(req.headers["x-image-height"] ?? 0) || undefined;
     try {
       const stored = await storagePut(`gallery/originals/${nanoid()}-${filename}`, req.body, contentType);
-      const image = await createGalleryImage({ originalKey: stored.key, originalUrl: stored.url, filename, mimeType: contentType, fileSize: req.body.length, width, height });
-      res.status(201).json({ key: stored.key, url: stored.url, original: true, imageId: image?.id });
+      try {
+        const image = await createGalleryImage({ originalKey: stored.key, originalUrl: stored.url, filename, mimeType: contentType, fileSize: req.body.length, width, height });
+        res.status(201).json({ key: stored.key, url: stored.url, stored: true, persisted: true, imageId: image?.id });
+      } catch (indexError) {
+        console.error("[Upload] Image stored but record indexing failed", indexError);
+        res.status(202).json({ key: stored.key, url: stored.url, stored: true, persisted: false, filename, mimeType: contentType, fileSize: req.body.length, width, height });
+      }
     } catch (error) {
-      console.error("[Upload] Failed to store image", error);
+      console.error("[Upload] Failed before image storage completed", error);
       res.status(500).json({ error: "Image storage was unavailable. Please retry." });
+    }
+  });
+  app.post("/api/upload/reconcile", express.json({ limit: "1mb" }), async (req, res) => {
+    const body = req.body as { key?: string; url?: string; filename?: string; mimeType?: string; fileSize?: number; width?: number; height?: number };
+    if (!body.key || !body.url || !body.filename || !body.mimeType || !body.fileSize) {
+      res.status(400).json({ error: "Stored image metadata is incomplete." });
+      return;
+    }
+    try {
+      const image = await createGalleryImage({ originalKey: body.key, originalUrl: body.url, filename: body.filename, mimeType: body.mimeType, fileSize: body.fileSize, width: body.width, height: body.height });
+      res.status(201).json({ persisted: true, imageId: image?.id });
+    } catch (error) {
+      console.error("[Upload] Pending record reconciliation failed", error);
+      res.status(503).json({ persisted: false, error: "Image is safely stored and will be indexed when the connection is ready." });
     }
   });
   registerStorageProxy(app);

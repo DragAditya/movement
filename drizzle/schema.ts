@@ -1,4 +1,4 @@
-import { boolean, int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { boolean, int, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -25,22 +25,8 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-export const collections = mysqlTable("collections", {
-  id: int("id").autoincrement().primaryKey(),
-  slug: varchar("slug", { length: 120 }).notNull().unique(),
-  name: varchar("name", { length: 180 }).notNull(),
-  description: text("description"),
-  coverImageUrl: text("coverImageUrl"),
-  visibility: mysqlEnum("visibility", ["public", "private"]).default("public").notNull(),
-  sharingMode: mysqlEnum("sharingMode", ["standard", "immersive", "kiosk"]).default("immersive").notNull(),
-  sortOrder: int("sortOrder").default(0).notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
-
 export const galleryImages = mysqlTable("galleryImages", {
   id: int("id").autoincrement().primaryKey(),
-  collectionId: int("collectionId"),
   originalKey: varchar("originalKey", { length: 512 }).notNull(),
   originalUrl: text("originalUrl").notNull(),
   thumbnailUrl: text("thumbnailUrl"),
@@ -50,8 +36,32 @@ export const galleryImages = mysqlTable("galleryImages", {
   width: int("width"),
   height: int("height"),
   caption: text("caption"),
+  smartGroup: mysqlEnum("smartGroup", ["personal", "screens", "projects"]).default("personal").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
+
+export const albums = mysqlTable("albums", {
+  id: int("id").autoincrement().primaryKey(),
+  slug: varchar("slug", { length: 160 }).notNull().unique(),
+  name: varchar("name", { length: 180 }).notNull(),
+  description: text("description"),
+  coverImageId: int("coverImageId"),
+  visibility: mysqlEnum("visibility", ["public", "private"]).default("public").notNull(),
+  presentationMode: mysqlEnum("presentationMode", ["standard", "immersive", "kiosk"]).default("immersive").notNull(),
+  accent: varchar("accent", { length: 24 }).default("stone").notNull(),
+  sortOrder: int("sortOrder").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export const albumImages = mysqlTable("albumImages", {
+  id: int("id").autoincrement().primaryKey(),
+  albumId: int("albumId").notNull(),
+  imageId: int("imageId").notNull(),
+  source: mysqlEnum("source", ["manual", "auto"]).default("manual").notNull(),
+  sortOrder: int("sortOrder").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [uniqueIndex("albumImages_album_image_unique").on(table.albumId, table.imageId)]);
 
 export const slideshowSettings = mysqlTable("slideshowSettings", {
   id: int("id").autoincrement().primaryKey(),
@@ -79,5 +89,6 @@ export const activityEvents = mysqlTable("activityEvents", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
-export type GalleryCollection = typeof collections.$inferSelect;
 export type GalleryImage = typeof galleryImages.$inferSelect;
+export type Album = typeof albums.$inferSelect;
+export type AlbumImage = typeof albumImages.$inferSelect;
