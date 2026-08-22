@@ -43,6 +43,7 @@ export const galleryImages = mysqlTable("galleryImages", {
 export const albums = mysqlTable("albums", {
   id: int("id").autoincrement().primaryKey(),
   slug: varchar("slug", { length: 160 }).notNull().unique(),
+  kind: mysqlEnum("kind", ["system", "custom"]).default("custom").notNull(),
   name: varchar("name", { length: 180 }).notNull(),
   description: text("description"),
   coverImageId: int("coverImageId"),
@@ -61,7 +62,7 @@ export const albumImages = mysqlTable("albumImages", {
   source: mysqlEnum("source", ["manual", "auto"]).default("manual").notNull(),
   sortOrder: int("sortOrder").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-}, table => [uniqueIndex("albumImages_album_image_unique").on(table.albumId, table.imageId)]);
+}, table => [uniqueIndex("albumImages_album_image_unique").on(table.albumId, table.imageId), uniqueIndex("albumImages_image_unique").on(table.imageId)]);
 
 export const slideshowSettings = mysqlTable("slideshowSettings", {
   id: int("id").autoincrement().primaryKey(),

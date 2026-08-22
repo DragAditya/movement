@@ -36,3 +36,9 @@
 - [x] Run and document real desktop/mobile album workflows: create, edit, cover, visibility, reorder, membership, delete, and slideshow entry.
 - [x] Verify and document upload reconciliation statuses during stored, indexed, and interrupted confirmation paths.
 - [x] Fix upload status reconciliation so a successfully stored image cannot remain or become marked as failed in the upload queue.
+- [x] Show only unassigned uploaded images in the admin Library section while preserving all uploaded images elsewhere.
+- [x] Enforce one custom album per image and move an image cleanly when it is reassigned to another custom album.
+- [x] Add a permanent All Images album that includes every upload without being constrained by custom-album membership.
+- [x] Add membership-rule tests and verify the updated Library and album behavior on desktop and mobile.
+- [x] Add focused coverage for exclusive reassignment and permanent All Images immutability.
+- [x] Verify live procedure rejection for update, delete, reorder, and membership changes on the permanent All Images album.

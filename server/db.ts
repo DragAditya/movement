@@ -1,7 +1,8 @@
-import { desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { albumImages, albums, galleryImages, InsertUser, users } from "../drizzle/schema";
 import { ENV } from './_core/env';
+import { isMutableAlbum } from "./albumRules";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -121,7 +122,7 @@ export async function createGalleryImage(input: GalleryImageInput) {
 export async function createAlbum(input: { slug: string; name: string; description?: string; coverImageId?: number; visibility: "public" | "private"; presentationMode: "standard" | "immersive" | "kiosk"; accent: string; sortOrder: number }) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
-  await db.insert(albums).values(input);
+  await db.insert(albums).values({ ...input, kind: "custom" });
   const [album] = await db.select().from(albums).where(eq(albums.slug, input.slug)).limit(1);
   return album;
 }
@@ -129,6 +130,7 @@ export async function createAlbum(input: { slug: string; name: string; descripti
 export async function updateAlbum(albumId: number, input: Partial<{ name: string; description: string; coverImageId: number | null; visibility: "public" | "private"; presentationMode: "standard" | "immersive" | "kiosk"; accent: string; sortOrder: number }>) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
+  await assertCustomAlbum(db, albumId);
   await db.update(albums).set(input).where(eq(albums.id, albumId));
   const [album] = await db.select().from(albums).where(eq(albums.id, albumId)).limit(1);
   return album;
@@ -137,6 +139,7 @@ export async function updateAlbum(albumId: number, input: Partial<{ name: string
 export async function deleteAlbum(albumId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
+  await assertCustomAlbum(db, albumId);
   await db.delete(albumImages).where(eq(albumImages.albumId, albumId));
   await db.delete(albums).where(eq(albums.id, albumId));
 }
@@ -144,6 +147,10 @@ export async function deleteAlbum(albumId: number) {
 export async function setAlbumImages(albumId: number, imageIds: number[]) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
+  await assertCustomAlbum(db, albumId);
+  if (imageIds.length) {
+    await db.delete(albumImages).where(and(ne(albumImages.albumId, albumId), inArray(albumImages.imageId, imageIds)));
+  }
   await db.delete(albumImages).where(eq(albumImages.albumId, albumId));
   if (imageIds.length) await db.insert(albumImages).values(imageIds.map((imageId, index) => ({ albumId, imageId, source: "manual" as const, sortOrder: index })));
 }
@@ -151,12 +158,29 @@ export async function setAlbumImages(albumId: number, imageIds: number[]) {
 export async function reorderAlbums(albumIds: number[]) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
+  const rows = await db.select().from(albums).where(inArray(albums.id, albumIds));
+  if (rows.length !== albumIds.length || rows.some(album => album.kind !== "custom")) throw new Error("Only custom albums can be reordered");
   await Promise.all(albumIds.map((albumId, index) => db.update(albums).set({ sortOrder: index }).where(eq(albums.id, albumId))));
+}
+
+async function assertCustomAlbum(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, albumId: number) {
+  const [album] = await db.select().from(albums).where(eq(albums.id, albumId)).limit(1);
+  if (!album || !isMutableAlbum(album.kind)) throw new Error("This permanent album cannot be modified");
+  return album;
+}
+
+async function ensureAllImagesAlbum(db: NonNullable<Awaited<ReturnType<typeof getDb>>>) {
+  const [existing] = await db.select().from(albums).where(eq(albums.slug, "all-images")).limit(1);
+  if (existing) return existing;
+  await db.insert(albums).values({ slug: "all-images", kind: "system", name: "All Images", description: "Every image ever uploaded to your gallery.", visibility: "public", presentationMode: "immersive", accent: "stone", sortOrder: -1 });
+  const [created] = await db.select().from(albums).where(eq(albums.slug, "all-images")).limit(1);
+  return created;
 }
 
 export async function getAlbumDashboard() {
   const db = await getDb();
   if (!db) return { albums: [], images: [], memberships: [] };
+  await ensureAllImagesAlbum(db);
   const [albumRows, imageRows, membershipRows] = await Promise.all([
     db.select().from(albums).orderBy(albums.sortOrder, albums.createdAt),
     db.select().from(galleryImages).orderBy(desc(galleryImages.createdAt)),

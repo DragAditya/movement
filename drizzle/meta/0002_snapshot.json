@@ -1,8 +1,8 @@
 {
   "version": "5",
   "dialect": "mysql",
-  "id": "8ea2af33-fb00-4907-baf8-fd3ce56c1daf",
-  "prevId": "55a48918-406d-485e-89c1-2cbd0b0ea5f2",
+  "id": "eee21eb3-0dee-47be-8f7b-c26cc05af67c",
+  "prevId": "8ea2af33-fb00-4907-baf8-fd3ce56c1daf",
   "tables": {
     "activityEvents": {
       "name": "activityEvents",
@@ -107,6 +107,13 @@
             "imageId"
           ],
           "isUnique": true
+        },
+        "albumImages_image_unique": {
+          "name": "albumImages_image_unique",
+          "columns": [
+            "imageId"
+          ],
+          "isUnique": true
         }
       },
       "foreignKeys": {},
@@ -137,6 +144,14 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "enum('system','custom')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'custom'"
         },
         "name": {
           "name": "name",

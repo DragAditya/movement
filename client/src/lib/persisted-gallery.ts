@@ -1,4 +1,5 @@
 import { trpc } from "@/lib/trpc";
+import { unassignedImageIds } from "@/lib/album-membership";
 
 export type SmartGroup = "personal" | "screens" | "projects";
 
@@ -19,6 +20,7 @@ export type PersistedGalleryImage = {
 export type PersistedAlbum = {
   id: number;
   slug: string;
+  kind: "system" | "custom";
   name: string;
   description: string;
   cover: string | null;
@@ -30,7 +32,7 @@ export type PersistedAlbum = {
 };
 
 export type SmartAlbum = {
-  id: "library" | SmartGroup;
+  id: SmartGroup;
   name: string;
   description: string;
   imageCount: number;
@@ -59,12 +61,16 @@ export function usePersistedGallery() {
   const byImageId = new Map(images.map(image => [image.recordId, image]));
   const membershipByAlbum = new Map<number, number[]>();
   dashboard?.memberships.forEach(membership => membershipByAlbum.set(membership.albumId, [...(membershipByAlbum.get(membership.albumId) ?? []), membership.imageId]));
-  const albumImages = (albumId: number) => (membershipByAlbum.get(albumId) ?? []).map(imageId => byImageId.get(imageId)).filter((image): image is PersistedGalleryImage => Boolean(image));
+  const unassignedIds = unassignedImageIds(images.map(image => image.recordId), dashboard?.memberships ?? []);
+  const unassignedImages = images.filter(image => unassignedIds.includes(image.recordId));
+  const systemAlbumId = dashboard?.albums.find(album => album.kind === "system")?.id;
+  const albumImages = (albumId: number) => albumId === systemAlbumId ? images : (membershipByAlbum.get(albumId) ?? []).map(imageId => byImageId.get(imageId)).filter((image): image is PersistedGalleryImage => Boolean(image));
   const albums: PersistedAlbum[] = dashboard?.albums.map(album => {
     const members = albumImages(album.id);
     return {
       id: album.id,
       slug: album.slug,
+      kind: album.kind,
       name: album.name,
       description: album.description ?? "",
       coverImageId: album.coverImageId,
@@ -76,12 +82,13 @@ export function usePersistedGallery() {
     };
   }) ?? [];
   const smartAlbums: SmartAlbum[] = [
-    { id: "library", name: "Library", description: "Every image you have uploaded.", imageCount: images.length },
     { id: "screens", name: "Captured screens", description: "Images classified from screen-related filenames.", imageCount: images.filter(image => image.smartGroup === "screens").length },
     { id: "projects", name: "Project visuals", description: "App, design, mockup, and interface images.", imageCount: images.filter(image => image.smartGroup === "projects").length },
     { id: "personal", name: "Personal images", description: "All other uploaded images.", imageCount: images.filter(image => image.smartGroup === "personal").length },
   ];
-  const smartImages = (group: SmartAlbum["id"]) => group === "library" ? images : images.filter(image => image.smartGroup === group);
+  const smartImages = (group: SmartAlbum["id"]) => images.filter(image => image.smartGroup === group);
+  const systemAlbum = albums.find(album => album.kind === "system") ?? null;
+  const customAlbums = albums.filter(album => album.kind === "custom");
 
-  return { ...query, images, albums, smartAlbums, albumImages, smartImages };
+  return { ...query, images, albums, customAlbums, systemAlbum, unassignedImages, smartAlbums, albumImages, smartImages };
 }
