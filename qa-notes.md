@@ -17,3 +17,7 @@ The repaired desktop manager now removes all collection-creation actions from Up
 The repaired mobile manager retains its fixed, non-overlapping bottom navigation. The Upload screen directs category creation to the Categories tab while keeping the upload and uncategorized workflow focused on selecting existing categories.
 
 Collection assignment now uses a required existing-category picker instead of a free-text prompt. Selected images are retained in the destination category panel immediately after movement, and uploaded records plus image-to-category assignments are persisted through the gallery data layer. The full TypeScript check, production build, and seven unit tests pass.
+
+## Shared Navigation and Uploaded-Only Content Validation
+
+The public homepage, collections directory, and admin workspace were rechecked at desktop and 390px mobile widths. Each now presents the same Gallery logo and Gallery/Admin switch. The public homepage displays uploaded persisted records only; no default vase images or seeded collections are present. The collection directory shows a directed empty state until real categories exist, and the admin workspace begins from the persisted upload library without demo items.

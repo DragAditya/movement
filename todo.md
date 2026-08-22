@@ -20,3 +20,8 @@
 - [x] Restrict collection creation to the Categories tab and remove collection-creation prompts from upload management.
 - [x] Add automated coverage for collection assignment and verify the corrected desktop and mobile flows.
 - [x] Persist created categories and uploaded image-to-category assignments so the repaired collection state survives a refresh.
+- [x] Audit the public and admin experiences for navigation, content, persistence, and responsive workflow defects, then document the findings.
+- [x] Build one shared navigation bar with the Gallery logo and an explicit Gallery/Admin mode switch across public and admin pages.
+- [x] Remove all default demo images, demo collections, and placeholder content from public and admin views.
+- [x] Drive the public homepage, collections, image viewer, and slideshow entirely from uploaded persisted images and collections.
+- [x] Add polished uploaded-content empty states and verify the updated desktop and mobile experiences.

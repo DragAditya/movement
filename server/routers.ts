@@ -23,6 +23,7 @@ export const appRouter = router({
   }),
   gallery: router({
     publicShare: publicProcedure.input(z.object({ slug: z.string().min(1) })).query(({ input }) => ({ slug: input.slug, public: true })),
+    publicDashboard: publicProcedure.query(() => db.getGalleryDashboard()),
     validateCollection: publicProcedure.input(z.object({ name: z.string().min(1).max(180), mode: sharingMode })).query(({ input }) => ({ ...input, valid: true })),
     validateSlideshowSettings: publicProcedure.input(z.object({ intervalSeconds: z.number().int().min(2).max(60), transition: slideshowMode, kiosk: z.boolean() })).query(({ input }) => ({ ...input, valid: true })),
     adminDashboard: publicProcedure.query(() => db.getGalleryDashboard()),
