@@ -1,5 +1,6 @@
 import type { GalleryImage } from "@/data/gallery";
 import { nextSlideIndex } from "@/lib/gallery-utils";
+import { orientationLockTarget, playbackDefaults, shouldRevealControls, type OrientationMode } from "@/lib/immersive-policy";
 import {
   ChevronLeft,
   ChevronRight,
@@ -34,8 +35,8 @@ export default function SlideshowPlayer({
   const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pointerStart = useRef<{ x: number; y: number } | null>(null);
   const [index, setIndex] = useState(Math.min(initialIndex, Math.max(images.length - 1, 0)));
-  const [playing, setPlaying] = useState(mode === "kiosk");
-  const [controlsVisible, setControlsVisible] = useState(mode !== "kiosk");
+  const [playing, setPlaying] = useState(playbackDefaults(mode).autoplay);
+  const [controlsVisible, setControlsVisible] = useState(playbackDefaults(mode).controlsVisible);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [interval, setIntervalSeconds] = useState(5);
   const [transition, setTransition] = useState<Transition>("crossfade");
@@ -43,9 +44,10 @@ export default function SlideshowPlayer({
   const [showCounter, setShowCounter] = useState(true);
   const [showCaptions, setShowCaptions] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [orientation, setOrientation] = useState<OrientationMode>("system");
 
   const showControls = useCallback(() => {
-    if (mode === "kiosk" && !settingsOpen) return;
+    if (!shouldRevealControls(mode, "intent") && !settingsOpen) return;
     setControlsVisible(true);
     if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
     inactivityTimer.current = setTimeout(() => {
@@ -54,10 +56,10 @@ export default function SlideshowPlayer({
   }, [mode, settingsOpen]);
 
   const move = useCallback(
-    (direction: -1 | 1) => {
+    (direction: -1 | 1, revealControls = false) => {
       if (!images.length) return;
       setIndex(current => nextSlideIndex(current, direction, images.length));
-      showControls();
+      if (revealControls) showControls();
     },
     [images.length, showControls]
   );
@@ -74,11 +76,27 @@ export default function SlideshowPlayer({
     }
   }, []);
 
+  const enterImmersiveFullscreen = useCallback(async () => {
+    if (mode === "standard" || document.fullscreenElement) return;
+    try { await rootRef.current?.requestFullscreen(); } catch { /* Fixed viewport remains the intentional fallback. */ }
+  }, [mode]);
+
   useEffect(() => {
     const handleFullscreen = () => setIsFullscreen(Boolean(document.fullscreenElement));
     document.addEventListener("fullscreenchange", handleFullscreen);
     return () => document.removeEventListener("fullscreenchange", handleFullscreen);
   }, []);
+
+  useEffect(() => {
+    const nativeOrientation = screen.orientation as ScreenOrientation & { lock?: (value: "portrait" | "landscape") => Promise<void>; unlock?: () => void };
+    const lockTarget = orientationLockTarget(isFullscreen, orientation, Boolean(nativeOrientation?.lock));
+    if (!lockTarget) {
+      nativeOrientation?.unlock?.();
+      return;
+    }
+    void nativeOrientation?.lock?.(lockTarget).catch(() => undefined);
+    return () => nativeOrientation?.unlock?.();
+  }, [isFullscreen, orientation]);
 
   useEffect(() => {
     if (!playing || images.length < 2) return;
@@ -88,8 +106,8 @@ export default function SlideshowPlayer({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "ArrowLeft") move(-1);
-      if (event.key === "ArrowRight") move(1);
+      if (event.key === "ArrowLeft") move(-1, true);
+      if (event.key === "ArrowRight") move(1, true);
       if (event.key === " ") {
         event.preventDefault();
         setPlaying(current => !current);
@@ -104,11 +122,13 @@ export default function SlideshowPlayer({
   }, [move, onExit]);
 
   useEffect(() => {
-    showControls();
+    if (mode === "standard") showControls();
+    else setControlsVisible(false);
+    void enterImmersiveFullscreen();
     return () => {
       if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
     };
-  }, [showControls]);
+  }, [enterImmersiveFullscreen, mode, showControls]);
 
   const handlePointerUp = (event: React.PointerEvent) => {
     if (!pointerStart.current) return;
@@ -116,8 +136,9 @@ export default function SlideshowPlayer({
     const deltaY = event.clientY - pointerStart.current.y;
     pointerStart.current = null;
     if (Math.abs(deltaX) > 56 && Math.abs(deltaX) > Math.abs(deltaY) * 1.25) {
-      move(deltaX < 0 ? 1 : -1);
+      move(deltaX < 0 ? 1 : -1, true);
     } else if (Math.abs(deltaX) < 12 && Math.abs(deltaY) < 12) {
+      void enterImmersiveFullscreen();
       showControls();
     }
   };
@@ -128,7 +149,7 @@ export default function SlideshowPlayer({
 
   return (
     <div
-      className={`slideshow-player mode-${mode}`}
+      className={`slideshow-player mode-${mode} orientation-${orientation}`}
       ref={rootRef}
       onMouseMove={showControls}
       onPointerDown={event => {
@@ -160,10 +181,10 @@ export default function SlideshowPlayer({
         </div>
       </div>
 
-      <button className={`${controlClass} slideshow-step previous`} onClick={() => move(-1)} aria-label="Previous image">
+      <button className={`${controlClass} slideshow-step previous`} onClick={() => move(-1, true)} aria-label="Previous image">
         <ChevronLeft size={28} strokeWidth={1.5} />
       </button>
-      <button className={`${controlClass} slideshow-step next`} onClick={() => move(1)} aria-label="Next image">
+      <button className={`${controlClass} slideshow-step next`} onClick={() => move(1, true)} aria-label="Next image">
         <ChevronRight size={28} strokeWidth={1.5} />
       </button>
 
@@ -206,6 +227,13 @@ export default function SlideshowPlayer({
             <select value={fit} onChange={event => setFit(event.target.value as FitMode)}>
               <option value="contain">Fit image</option>
               <option value="cover">Fill screen</option>
+            </select>
+          </label>
+          <label className="settings-label">Orientation
+            <select value={orientation} onChange={event => setOrientation(event.target.value as OrientationMode)}>
+              <option value="system">System orientation</option>
+              <option value="portrait">Portrait</option>
+              <option value="landscape">Landscape</option>
             </select>
           </label>
           <label className="setting-check"><input type="checkbox" checked={showCounter} onChange={event => setShowCounter(event.target.checked)} /> Show counter</label>

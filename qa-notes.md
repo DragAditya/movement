@@ -53,3 +53,19 @@ The live API was also exercised directly against the All Images system album. Up
 The mobile Library header was rechecked after the workflow refinement. The New album control is removed from this screen; album creation remains in the dedicated Albums workspace. The selected-image action bar now exposes **Organize images**, **Delete permanently**, and **Clear**. Permanent deletion removes image records, memberships, storage keys, and all UI references after confirmation. Under the managed storage contract, removing the stored key from the database makes the underlying object unreachable and effectively gone; no storage delete endpoint is exposed.
 
 The album editor is now metadata-only. It retains name, description, visibility, presentation, accent, and existing-cover controls, but has no image picker or membership writes. Images can be added only from the unassigned Library, which prevents accidental cross-album transfers while editing. The deletion procedure has router-contract coverage; the complete suite contains **23 passing tests**, with type checking and production build passing.
+
+## Immersive Playback Upgrade
+
+Immersive mode now begins as an autoplaying, looping, full-viewport presentation with controls hidden by default. A deliberate tap, mouse movement, keyboard navigation, or settings action reveals controls briefly; automatic slide changes no longer trigger that reveal, preventing the former Kiosk-like interface flash between images. Where the browser permits the native Fullscreen API, Immersive requests it and can hide browser chrome; the fixed full-viewport player remains the clean fallback where a browser requires a user gesture or rejects fullscreen.
+
+The presentation settings now offer System, Portrait, and Landscape orientation modes. Manual options use native orientation lock only when supported and otherwise retain the device orientation with a stable fitted image. Desktop and mobile captures confirm a clean control-free immersive canvas. The complete test suite, type check, and production build pass.
+
+Focused playback-policy tests now cover autoplay defaults, control visibility after intentional versus automatic transitions, supported and unsupported orientation-lock paths, and the native-fullscreen versus clean viewport fallback. The final suite contains **27 passing tests**, with type checking and production build completing successfully.
+
+Live browser verification confirmed that the Immersive slideshow loads with control opacity at `0` and its player canvas cleanly fills the viewport when native fullscreen is not granted. A deliberate pointer movement raised the top-bar opacity from `0` to an active transition state, confirming intentional control reveal while retaining the clean viewport fallback.
+
+The live player advanced from `01 / 09` to `02 / 09` after its autoplay interval while top-bar opacity remained `0`, confirming automatic transitions do not flash the UI. The revealed presentation panel exposes the expected **System orientation**, **Portrait**, and **Landscape** options.
+
+The live Play/Pause control was exercised directly: after pausing, the counter remained at `07 / 09` for a full autoplay interval and the control label changed to **Play**. Resuming restored the **Pause** label, confirming the expected playback handoff.
+
+The live orientation selector changed the player through `orientation-portrait`, `orientation-landscape`, and back to `orientation-system` classes. Native fullscreen was unavailable in this browser verification, so the player retained its clean full-viewport fallback without attempting a disruptive device rotation.

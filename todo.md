@@ -46,3 +46,8 @@
 - [x] Add a permanent delete action beside Clear for selected unassigned images, including a confirmation and data cleanup.
 - [x] Remove image selection from the album editor so it can only edit album metadata and cannot transfer images between albums.
 - [x] Test and verify the simplified Library bulk actions and album ownership behavior on mobile and desktop.
+- [x] Make Immersive presentation fullscreen-first with autoplay, looping, and intentionally revealed auto-hidden controls.
+- [x] Add Auto, Portrait, and Landscape orientation options with system-orientation fallback behavior.
+- [x] Eliminate Kiosk-layout flashes and stabilize image transitions between Immersive slideshow changes.
+- [x] Test Immersive playback, pause control, orientation fallback, fullscreen fallback, and responsive presentation behavior.
+- [x] Add focused Immersive playback-policy tests for hidden controls, user reveal, automatic slide changes, orientation modes, and fullscreen fallback.
