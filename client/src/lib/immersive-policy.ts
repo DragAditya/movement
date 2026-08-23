@@ -22,9 +22,24 @@ export function fullscreenPresentationState(requestAccepted: boolean) {
 }
 
 export function adaptiveObjectFit(imageAspectRatio: number | null, viewportAspectRatio: number) {
-  if (!imageAspectRatio || !Number.isFinite(imageAspectRatio) || !Number.isFinite(viewportAspectRatio)) return "contain" as const;
-  const mismatch = Math.abs(Math.log(imageAspectRatio / viewportAspectRatio));
-  return mismatch < 0.14 ? "cover" as const : "contain" as const;
+  void imageAspectRatio;
+  void viewportAspectRatio;
+  return "contain" as const;
+}
+
+export function containedImageFrame(imageWidth: number, imageHeight: number, viewportWidth: number, viewportHeight: number) {
+  if (![imageWidth, imageHeight, viewportWidth, viewportHeight].every(value => Number.isFinite(value) && value > 0)) {
+    return { width: 0, height: 0, offsetX: 0, offsetY: 0 };
+  }
+  const scale = Math.min(viewportWidth / imageWidth, viewportHeight / imageHeight);
+  const width = imageWidth * scale;
+  const height = imageHeight * scale;
+  return {
+    width,
+    height,
+    offsetX: (viewportWidth - width) / 2,
+    offsetY: (viewportHeight - height) / 2,
+  };
 }
 
 export type ImmersiveGesture = "previous" | "next" | "exit" | "reveal" | "none";

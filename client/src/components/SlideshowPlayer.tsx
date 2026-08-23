@@ -1,6 +1,6 @@
 import type { GalleryImage } from "@/data/gallery";
 import { nextSlideIndex } from "@/lib/gallery-utils";
-import { adaptiveObjectFit, orientationLockTarget, playbackDefaults, resolveImmersiveGesture, shouldRevealControls, type OrientationMode } from "@/lib/immersive-policy";
+import { orientationLockTarget, playbackDefaults, resolveImmersiveGesture, shouldRevealControls, type OrientationMode } from "@/lib/immersive-policy";
 import {
   ChevronLeft,
   ChevronRight,
@@ -14,7 +14,6 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type Transition = "crossfade" | "fade" | "slide" | "instant";
-type FitMode = "adaptive" | "contain" | "cover";
 
 type SlideshowPlayerProps = {
   images: GalleryImage[];
@@ -41,7 +40,6 @@ export default function SlideshowPlayer({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [interval, setIntervalSeconds] = useState(5);
   const [transition, setTransition] = useState<Transition>("crossfade");
-  const [fit, setFit] = useState<FitMode>("cover");
   const [showCounter, setShowCounter] = useState(true);
   const [showCaptions, setShowCaptions] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -49,11 +47,8 @@ export default function SlideshowPlayer({
   const [verticalNavigation, setVerticalNavigation] = useState(true);
   const [swipeDownExit, setSwipeDownExit] = useState(true);
   const [gestureSensitivity, setGestureSensitivity] = useState<"gentle" | "balanced" | "deliberate">("balanced");
-  const [imageAspectRatio, setImageAspectRatio] = useState<number | null>(null);
-  const [viewportAspectRatio, setViewportAspectRatio] = useState(1);
 
   const gestureThreshold = gestureSensitivity === "gentle" ? 48 : gestureSensitivity === "deliberate" ? 104 : 72;
-  const resolvedFit = fit === "adaptive" ? adaptiveObjectFit(imageAspectRatio, viewportAspectRatio) : fit;
 
   const showControls = useCallback(() => {
     if (!shouldRevealControls(mode, "intent") && !settingsOpen) return;
@@ -113,13 +108,6 @@ export default function SlideshowPlayer({
     void nativeOrientation?.lock?.(lockTarget).catch(() => undefined);
     return () => nativeOrientation?.unlock?.();
   }, [isFullscreen, orientation]);
-
-  useEffect(() => {
-    const updateViewportRatio = () => setViewportAspectRatio(window.innerWidth / window.innerHeight);
-    updateViewportRatio();
-    window.addEventListener("resize", updateViewportRatio);
-    return () => window.removeEventListener("resize", updateViewportRatio);
-  }, []);
 
   useEffect(() => {
     if (!playing || images.length < 2) return;
@@ -214,7 +202,7 @@ export default function SlideshowPlayer({
       aria-label="Fullscreen slideshow"
     >
       <div className={`slideshow-image-stage transition-${transition}`}>
-        <img key={image.id} className={`slideshow-image fit-${resolvedFit} ${fit === "adaptive" ? "fit-adaptive" : ""}`} src={image.src} alt={image.alt} draggable={false} onLoad={event => setImageAspectRatio(event.currentTarget.naturalWidth / event.currentTarget.naturalHeight)} />
+        <img key={image.id} className="slideshow-image fit-contain" src={image.src} alt={image.alt} draggable={false} />
       </div>
 
       <div className={`slideshow-shade ${controlsVisible || settingsOpen ? "is-visible" : ""}`} />
@@ -276,13 +264,6 @@ export default function SlideshowPlayer({
               <option value="instant">Instant</option>
             </select>
           </label>
-          <label className="settings-label">Image fitting
-            <select value={fit} onChange={event => setFit(event.target.value as FitMode)}>
-              <option value="adaptive">Fit by image & screen shape</option>
-              <option value="contain">Fit entire image</option>
-              <option value="cover">Fill screen (recommended)</option>
-            </select>
-          </label>
           <label className="settings-label">Orientation
             <select value={orientation} onChange={event => setOrientation(event.target.value as OrientationMode)}>
               <option value="system">System orientation</option>
@@ -301,7 +282,7 @@ export default function SlideshowPlayer({
           </label>
           <label className="setting-check"><input type="checkbox" checked={showCounter} onChange={event => setShowCounter(event.target.checked)} /> Show counter</label>
           <label className="setting-check"><input type="checkbox" checked={showCaptions} onChange={event => setShowCaptions(event.target.checked)} /> Show captions</label>
-          <p className="settings-help">Swipe up for the next image, swipe down to exit, use arrow keys to navigate, Space to play or pause, and Escape to exit.</p>
+          <p className="settings-help">Images always fit fully on screen. Swipe up for the next image, swipe down to exit, use arrow keys to navigate, Space to play or pause, and Escape to exit.</p>
         </aside>
       )}
     </div>

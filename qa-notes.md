@@ -98,6 +98,22 @@ The final queue check used the real UI with a controlled Ready response plus a l
 
 The final Albums workspace was verified at `/manage?tab=albums` on both 390px mobile and 1280px desktop. On mobile, the previous uneven two-column card grid is replaced by a spacious single-column list with a full-width **New album** action, consistent thumbnail surfaces, and compact edit, order, and delete controls. Desktop retains the balanced three-column card grid. The empty **Summer** album now receives its selected indigo cover rather than displaying an empty white block.
 
+## Contain-Only Immersive Framing
+
+The updated desktop Immersive presentation visibly framed the full landscape logo image inside the dark stage, with no crop or forced zoom. Further portrait and mobile containment measurements are recorded with this release.
+
+Live desktop measurements across all ten uploaded sources reported `object-fit: contain` and a centered `50% 50%` position. The portrait source at 0.50 aspect ratio was visually shown in full within the wide presentation canvas, with expected side framing rather than crop; square and landscape sources use the same contain-only policy.
+
+Mobile captures confirmed the same fit-to-screen treatment in both device shapes: at 390 × 844 the complete square source stayed centered with safe top and bottom framing, and at 844 × 390 it stayed centered with safe side framing. No controls remain that can select cropped or fill-screen image behavior; the Immersive settings now state that images always fit fully on screen.
+
+Containment geometry coverage now verifies portrait and landscape source images against desktop 1280 × 720, mobile portrait 390 × 844, and mobile landscape 844 × 390 viewports. Every calculated frame stays within both viewport edges, preserves the source aspect ratio, and has non-negative centered offsets. The complete suite now contains **33 passing tests**, with type checking and production build passing.
+
+The final browser-side calculation confirmed the exact contain frames. At desktop 1280 × 720, the portrait frame is 322.9 × 720 with 478.5px side offsets, while the landscape frame is 1280 × 574.1 with 73px vertical offsets. At mobile 390 × 844, portrait is 378.5 × 844 and landscape is 390 × 174.9; at mobile landscape 844 × 390, portrait is 174.9 × 390 and landscape is 844 × 378.5. Every case reported both `fullyInside: true` and `aspectPreserved: true`.
+
+### Final browser containment record
+
+The live browser calculation was completed and saved for all six portrait/landscape and desktop/mobile combinations. It confirms each source is scaled to the largest centered frame that remains fully inside its viewport, with the original aspect ratio retained and no negative or overflowing edge.
+
 ## Loading, Upload Queue, and Albums Refinement
 
 Reusable animated skeletons now preserve the layout of the public home page, Albums directory, album detail, Admin Library, Admin Albums workspace, and slideshow entry while their gallery query is unresolved. Rendering coverage verifies every loading surface has an accessible status label and the intended card or media placeholder structure.

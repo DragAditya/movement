@@ -70,3 +70,10 @@
 - [x] Verify a mixed queue preserves completed items when a cancelled row is cleared.
 - [x] Reconfirm the final Albums QA record after all live evidence is complete.
 - [x] Add the final desktop and mobile Albums workspace verification record to QA notes.
+- [x] Make Immersive mode always contain the full image with no crop, zoom, stretch, or overflow.
+- [x] Remove or neutralize Immersive fit controls that can select a cropped presentation.
+- [x] Verify complete portrait and landscape framing on desktop and mobile Immersive viewports.
+- [x] Add and validate containment geometry proof for portrait and landscape image and viewport combinations.
+- [x] Record final full-image visibility evidence for desktop and mobile Immersive presentation.
+- [x] Run and record browser-side portrait and landscape contain-frame calculations for all verified viewport shapes.
+- [x] Add an explicit final QA record for the verified browser contain-frame calculations.
