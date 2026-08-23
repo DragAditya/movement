@@ -83,3 +83,25 @@ Adaptive fit is now aspect-ratio-aware rather than an alias for contain. It fill
 The final repair uses a dedicated Touch Events path alongside Pointer Events, with `touch-action: none` on the Immersive surface so mobile browsers do not consume vertical gestures as scroll. A live `TouchEvent` upward swipe advanced the slideshow counter from `05 / 09` to `06 / 09`; a live downward `TouchEvent` invoked the shared exit action. The default framing is now Fill screen, while Fit by image & screen shape and Fit entire image remain available in settings.
 
 The final mobile capture confirms the default Fill screen mode now occupies the full immersive viewport, eliminating the unused framing space that caused the reported fitting issue. The existing fit options remain available when preservation of the entire original frame is preferred.
+
+## Loading, Upload Queue, and Albums Refinement
+
+A controlled development loading preview visibly rendered the Gallery home skeletons: the hero media, smart-view cards, custom album cards, and recent-image grid all retained their final layout footprint while data content was withheld. This preview path is development-only and does not affect published behavior.
+
+The same controlled preview was checked on the Albums directory and Admin Library. The directory held permanent-view and custom-album cards in place without empty-state flicker, while the Admin Library retained its upload workspace and showed a matching unassigned-image grid skeleton instead of a plain loading message.
+
+The album-detail route showed a complete heading-and-grid skeleton, and the shared Immersive slideshow route showed a full-viewport dark presentation placeholder rather than bare loading text. Together these route checks verify that the new loading treatment is present across the requested public, admin, detail, and presentation paths.
+
+The preview switch was then disabled and the live Admin Library returned to its normal uploaded-content state before upload-queue testing.
+
+The final queue check used the real UI with a controlled Ready response plus a live cancelled upload. Before clearing, both statuses were visible. The row-specific Clear action removed only the cancelled row; the Ready row remained visible, confirming that cancellation cleanup cannot discard completed work.
+
+The final Albums workspace was verified at `/manage?tab=albums` on both 390px mobile and 1280px desktop. On mobile, the previous uneven two-column card grid is replaced by a spacious single-column list with a full-width **New album** action, consistent thumbnail surfaces, and compact edit, order, and delete controls. Desktop retains the balanced three-column card grid. The empty **Summer** album now receives its selected indigo cover rather than displaying an empty white block.
+
+## Loading, Upload Queue, and Albums Refinement
+
+Reusable animated skeletons now preserve the layout of the public home page, Albums directory, album detail, Admin Library, Admin Albums workspace, and slideshow entry while their gallery query is unresolved. Rendering coverage verifies every loading surface has an accessible status label and the intended card or media placeholder structure.
+
+The upload queue was exercised with a live local upload cancellation. The cancelled row exposed both **Retry** and its new row-specific **Clear** control; Clear removed that row and returned the queue to its empty state. The global **Clear completed** control remains limited to Ready and Stored rows, so it cannot remove active, failed, or cancelled entries.
+
+The Albums workspace was visually checked at 390px mobile and 1280px desktop. Mobile now uses a full-width creation action and balanced single-column album cards, with compact thumbnail, metadata, edit, ordering, and delete controls. Desktop preserves the three-column editorial grid. Empty albums now use their selected accent cover instead of a blank visual surface. The final validation suite contains **32 passing tests**; type checking and production build pass.

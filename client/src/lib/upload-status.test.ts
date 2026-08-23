@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveInterruptedUpload, resolveUploadResponse } from "./upload-status";
+import { canRemoveUploadQueueItem, resolveInterruptedUpload, resolveUploadResponse } from "./upload-status";
 
 describe("upload result reconciliation", () => {
   it("marks an indexed stored upload as complete", () => {
@@ -20,5 +20,10 @@ describe("upload result reconciliation", () => {
 
   it("reserves failed for a confirmed non-successful response", () => {
     expect(resolveUploadResponse(500, { error: "Storage unavailable" })).toBe("failed");
+  });
+
+  it("allows a cancelled upload activity row to be cleared without treating an active upload as removable", () => {
+    expect(canRemoveUploadQueueItem("cancelled")).toBe(true);
+    expect(canRemoveUploadQueueItem("uploading")).toBe(false);
   });
 });

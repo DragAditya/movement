@@ -56,6 +56,7 @@ function toImage(image: { id: number; originalUrl: string; filename: string; cap
 
 export function usePersistedGallery() {
   const query = trpc.gallery.publicDashboard.useQuery();
+  const previewLoading = typeof window !== "undefined" && import.meta.env.DEV && window.sessionStorage.getItem("gallery-preview-loading") === "1";
   const dashboard = query.data;
   const images = dashboard?.images.map(toImage).sort((a, b) => b.createdAt.localeCompare(a.createdAt)) ?? [];
   const byImageId = new Map(images.map(image => [image.recordId, image]));
@@ -90,5 +91,5 @@ export function usePersistedGallery() {
   const systemAlbum = albums.find(album => album.kind === "system") ?? null;
   const customAlbums = albums.filter(album => album.kind === "custom");
 
-  return { ...query, images, albums, customAlbums, systemAlbum, unassignedImages, smartAlbums, albumImages, smartImages };
+  return { ...query, isLoading: query.isLoading || previewLoading, images, albums, customAlbums, systemAlbum, unassignedImages, smartAlbums, albumImages, smartImages };
 }

@@ -59,3 +59,14 @@
 - [x] Fix real mobile vertical swipe navigation and swipe-down exit handling in Immersive mode.
 - [x] Make the default Immersive framing fill the device viewport reliably for the user’s intended presentation.
 - [x] Verify the repaired touch and fitting behavior through mobile-compatible interaction paths.
+- [x] Add smooth, layout-preserving loading states for Gallery data and image content.
+- [x] Let users remove cancelled upload entries from the upload activity queue without affecting completed uploads.
+- [x] Redesign the mobile Albums layout with balanced cards, clear hierarchy, and uncluttered album actions.
+- [x] Test loading states, cancelled-upload clearing, and Albums responsiveness across desktop and mobile.
+- [x] Verify skeleton states through active fetch delays across public, admin, and slideshow routes.
+- [x] Run a live cancelled-upload flow and verify the row-specific Clear action leaves completed items intact.
+- [x] Document desktop and mobile visual verification for the refined Albums workspace.
+- [x] Force observable loading states for all upgraded gallery routes and verify their skeleton layouts.
+- [x] Verify a mixed queue preserves completed items when a cancelled row is cleared.
+- [x] Reconfirm the final Albums QA record after all live evidence is complete.
+- [x] Add the final desktop and mobile Albums workspace verification record to QA notes.
