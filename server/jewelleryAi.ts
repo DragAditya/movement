@@ -189,6 +189,13 @@ export async function runNewJewelleryAnalysis(imageId: number) {
   return runJewelleryAnalysis(imageId, settings);
 }
 
+/** A replacement preserves album membership, but its fresh visual content still earns an approval-only suggestion. */
+export async function runReplacementJewelleryAnalysis(imageId: number) {
+  const settings = await db.getAiSettings();
+  if (!settings.enabled || !settings.autoAnalyzeNew) return { imageId, status: "off" as const };
+  return runJewelleryAnalysis(imageId, settings);
+}
+
 export async function runJewelleryBatch(imageIds: number[]) {
   const settings = await db.getAiSettings();
   if (!settings.enabled) return { status: "off" as const, results: [] };

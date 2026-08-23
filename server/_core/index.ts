@@ -10,7 +10,7 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { storageGetSignedUrl, storagePut } from "../storage";
 import { nanoid } from "nanoid";
-import { createGalleryImage, listGalleryDuplicateCandidates, listGalleryImagesMissingFingerprints, listGalleryImagesMissingPreviews, listGalleryImagesMissingThumbnails, replaceGalleryImage, saveGalleryFingerprints, saveGalleryPreview, saveGalleryThumbnail } from "../db";
+import { createDuplicateReviewCandidate, createGalleryImage, listGalleryDuplicateCandidates, listGalleryImagesMissingFingerprints, listGalleryImagesMissingPreviews, listGalleryImagesMissingThumbnails, saveGalleryFingerprints, saveGalleryPreview, saveGalleryThumbnail } from "../db";
 import { contentHash, findDuplicateMatch, visualHash } from "../duplicateImage";
 import { runNewJewelleryAnalysis } from "../jewelleryAi";
 import sharp from "sharp";
@@ -116,15 +116,7 @@ async function startServer() {
     try {
       const fingerprints = { contentHash: contentHash(req.body), visualHash: await visualHash(req.body) };
       const duplicate = findDuplicateMatch(fingerprints, await listGalleryDuplicateCandidates());
-      const decision = typeof req.headers["x-duplicate-decision"] === "string" ? req.headers["x-duplicate-decision"] : "";
-      const replacementId = Number(req.headers["x-replace-image-id"] ?? 0);
-      const canUploadVisualMatch = duplicate?.kind === "similar" && decision === "upload-as-new";
-      const canReplaceVisualMatch = duplicate?.kind === "similar" && decision === "replace-existing" && replacementId === duplicate.image.id;
-      if (duplicate && !canUploadVisualMatch && !canReplaceVisualMatch) {
-        res.status(409).json({ error: duplicate.kind === "exact" ? "This exact image is already in your library." : "A visually similar image needs your review before uploading.", duplicate: { kind: duplicate.kind, distance: duplicate.distance, similarity: duplicate.similarity, image: { id: duplicate.image.id, filename: duplicate.image.filename, originalUrl: duplicate.image.originalUrl, thumbnailUrl: duplicate.image.thumbnailUrl, previewUrl: duplicate.image.previewUrl, width: duplicate.image.width, height: duplicate.image.height, createdAt: duplicate.image.createdAt } } });
-        return;
-      }
-      const stored = await storagePut(`gallery/originals/${nanoid()}-${filename}`, req.body, contentType);
+      const stored = await storagePut(`${duplicate ? "gallery/review-candidates/originals" : "gallery/originals"}/${nanoid()}-${filename}`, req.body, contentType);
       let thumbnailUrl: string | undefined;
       let previewUrl: string | undefined;
       try {
@@ -139,9 +131,14 @@ async function startServer() {
       }
       try {
         const values = { originalKey: stored.key, originalUrl: stored.url, thumbnailUrl, previewUrl, filename, mimeType: contentType, fileSize: req.body.length, width, height, ...fingerprints };
-        const image = canReplaceVisualMatch ? await replaceGalleryImage(replacementId, values) : await createGalleryImage(values);
+        if (duplicate) {
+          const review = await createDuplicateReviewCandidate({ ...values, matchKind: duplicate.kind, matchedImageId: duplicate.image.id, distance: duplicate.distance, similarity: duplicate.similarity });
+          res.status(202).json({ key: stored.key, url: stored.url, thumbnailUrl, previewUrl, stored: true, reviewPending: true, reviewId: review.id, filename, mimeType: contentType, fileSize: req.body.length, width, height, contentHash: fingerprints.contentHash, visualHash: fingerprints.visualHash });
+          return;
+        }
+        const image = await createGalleryImage(values);
         const analysis = image ? await runNewJewelleryAnalysis(image.id) : undefined;
-        res.status(201).json({ key: stored.key, url: stored.url, thumbnailUrl, previewUrl, stored: true, persisted: true, imageId: image?.id, replaced: canReplaceVisualMatch, aiStatus: analysis?.status });
+        res.status(201).json({ key: stored.key, url: stored.url, thumbnailUrl, previewUrl, stored: true, persisted: true, imageId: image?.id, aiStatus: analysis?.status });
       } catch (indexError) {
         console.error("[Upload] Image stored but record indexing failed", indexError);
         res.status(202).json({ key: stored.key, url: stored.url, thumbnailUrl, previewUrl, stored: true, persisted: false, filename, mimeType: contentType, fileSize: req.body.length, contentHash: fingerprints.contentHash, visualHash: fingerprints.visualHash, width, height });

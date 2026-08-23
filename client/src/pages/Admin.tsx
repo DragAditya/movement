@@ -12,8 +12,8 @@ import { Activity, Album, ArrowDownUp, Check, ChevronDown, ChevronUp, CloudUploa
 import { ChangeEvent, DragEvent, useEffect, useMemo, useRef, useState } from "react";
 
 type QueueStatus = UploadQueueStatus;
-type QueueItem = { id: string; file: File; transferFile?: File; preview: string; progress: number; status: QueueStatus; error?: string; optimized?: boolean };
-type DuplicateReview = { item: QueueItem; kind: "exact" | "similar"; similarity: number; existing: NonNullable<UploadResponsePayload["duplicate"]>["image"] };
+type QueueItem = { id: string; file: File; transferFile?: File; preview: string; progress: number; status: QueueStatus; error?: string; optimized?: boolean; reviewId?: number };
+type PendingDuplicateReview = { id: number; matchKind: "exact" | "similar"; matchedImageId: number; distance: number; similarity: number; originalUrl: string; thumbnailUrl: string | null; previewUrl: string | null; filename: string; mimeType: string; fileSize: number; width: number | null; height: number | null; createdAt: Date; existing: { id: number | null; filename: string | null; originalUrl: string | null; thumbnailUrl: string | null; previewUrl: string | null; width: number | null; height: number | null; createdAt: Date | null } };
 type Tab = "library" | "albums" | "presentation" | "activity";
 type AlbumDraft = { id?: number; name: string; description: string; visibility: "public" | "private"; presentationMode: "standard" | "immersive" | "kiosk"; accent: string; coverImageId: string; imageIds: number[] };
 type ActivityEvent = { id: string; title: string; detail: string; time: string };
@@ -94,9 +94,13 @@ export default function Admin() {
   const approveJewellerySuggestion = trpc.gallery.approveJewellerySuggestion.useMutation();
   const approveJewelleryBatch = trpc.gallery.approveJewelleryBatch.useMutation();
   const dismissJewellerySuggestion = trpc.gallery.dismissJewellerySuggestion.useMutation();
+  const pendingDuplicateReviewsQuery = trpc.gallery.pendingDuplicateReviews.useQuery();
+  const decideDuplicateReview = trpc.gallery.decideDuplicateReview.useMutation();
+  const bulkDecideDuplicateReviews = trpc.gallery.bulkDecideDuplicateReviews.useMutation();
   const [tab, setTab] = useState<Tab>(initialAdminTab);
   const [queue, setQueue] = useState<QueueItem[]>([]);
-  const [duplicateReview, setDuplicateReview] = useState<DuplicateReview | null>(null);
+  const [reviewSessionOpen, setReviewSessionOpen] = useState(false);
+  const [activeReviewId, setActiveReviewId] = useState<number | null>(null);
   const [selected, setSelected] = useState<number[]>([]);
   const [targetAlbum, setTargetAlbum] = useState("");
   const [grid, setGrid] = useState(true);
@@ -113,7 +117,19 @@ export default function Admin() {
     if (item?.preview) URL.revokeObjectURL(item.preview);
     return current.filter(entry => entry.id !== id);
   });
+  const removeResolvedReviewQueueItems = (reviewIds: number[]) => setQueue(current => {
+    const resolved = new Set(reviewIds);
+    current.filter(item => item.reviewId && resolved.has(item.reviewId)).forEach(item => { if (item.preview) URL.revokeObjectURL(item.preview); });
+    return current.filter(item => !item.reviewId || !resolved.has(item.reviewId));
+  });
   const libraryImages = useMemo(() => [...unassignedImages].sort((a, b) => sortNewest ? b.createdAt.localeCompare(a.createdAt) : a.title.localeCompare(b.title)), [unassignedImages, sortNewest]);
+  const pendingDuplicateReviews = (pendingDuplicateReviewsQuery.data ?? []) as PendingDuplicateReview[];
+  const activeDuplicateReview = reviewSessionOpen ? pendingDuplicateReviews.find(review => review.id === activeReviewId) ?? pendingDuplicateReviews[0] : undefined;
+  useEffect(() => {
+    if (!reviewSessionOpen) return;
+    if (!pendingDuplicateReviews.length) { setReviewSessionOpen(false); setActiveReviewId(null); return; }
+    if (!activeReviewId || !pendingDuplicateReviews.some(review => review.id === activeReviewId)) setActiveReviewId(pendingDuplicateReviews[0].id);
+  }, [activeReviewId, pendingDuplicateReviews, reviewSessionOpen]);
   const applyReadyBatch = async (imageIds: number[]) => {
     try {
       const result = await approveJewelleryBatch.mutateAsync({ imageIds });
@@ -139,7 +155,7 @@ export default function Admin() {
     }
   };
 
-  const upload = async (item: QueueItem, duplicateDecision?: { kind: "upload-as-new" | "replace-existing"; imageId?: number }) => {
+  const upload = async (item: QueueItem) => {
     let transferFile = item.transferFile;
     let optimized = item.optimized ?? false;
     if (!transferFile || transferFile.size > preferredTransferBytes) {
@@ -155,20 +171,19 @@ export default function Admin() {
     const dimensions = await getDimensions(transferFile);
     updateQueue(item.id, { status: "uploading", progress: 1, error: undefined });
     const xhr = new XMLHttpRequest(); xhrs.current[item.id] = xhr;
-    xhr.open("POST", "/api/upload"); xhr.setRequestHeader("content-type", transferFile.type); xhr.setRequestHeader("x-file-name", encodeURIComponent(transferFile.name)); xhr.setRequestHeader("x-image-width", String(dimensions.width)); xhr.setRequestHeader("x-image-height", String(dimensions.height)); if (duplicateDecision) { xhr.setRequestHeader("x-duplicate-decision", duplicateDecision.kind); if (duplicateDecision.imageId) xhr.setRequestHeader("x-replace-image-id", String(duplicateDecision.imageId)); }
+    xhr.open("POST", "/api/upload"); xhr.setRequestHeader("content-type", transferFile.type); xhr.setRequestHeader("x-file-name", encodeURIComponent(transferFile.name)); xhr.setRequestHeader("x-image-width", String(dimensions.width)); xhr.setRequestHeader("x-image-height", String(dimensions.height));
     xhr.upload.onprogress = event => { if (event.lengthComputable) updateQueue(item.id, { progress: Math.round((event.loaded / event.total) * 100) }); };
     xhr.onload = () => {
       delete xhrs.current[item.id];
       let payload: UploadResponsePayload = {};
       try { payload = JSON.parse(xhr.responseText); } catch { /* handled as request error below */ }
-      if (xhr.status === 409 && payload.duplicate) {
-        updateQueue(item.id, { status: "duplicate", progress: 0, error: payload.error });
-        setDuplicateReview({ item, kind: payload.duplicate.kind, similarity: payload.duplicate.similarity, existing: payload.duplicate.image });
-        return;
-      }
       const resolution = resolveUploadResponse(xhr.status, payload);
       if (resolution !== "failed") {
-        if (resolution === "complete") {
+        if (resolution === "review") {
+          updateQueue(item.id, { status: "duplicate", progress: 100, reviewId: payload.reviewId, error: "Saved to Needs Review. It has not been added to your library." });
+          addActivity("Duplicate queued for review", `${item.file.name} is safely waiting in Needs Review`);
+          void utils.gallery.pendingDuplicateReviews.invalidate();
+        } else if (resolution === "complete") {
           updateQueue(item.id, { status: "complete", progress: 100 });
           addActivity(payload.replaced ? "Image replaced" : "Image uploaded", payload.replaced ? `${item.file.name} replaced the reviewed existing image` : `${item.file.name} was added to your library`);
           utils.gallery.publicDashboard.invalidate();
@@ -182,16 +197,36 @@ export default function Admin() {
     xhr.send(transferFile);
   };
 
-  const decideDuplicate = (decision: "keep" | "upload-as-new" | "replace-existing") => {
-    const review = duplicateReview;
+  const openDuplicateReviews = () => { if (pendingDuplicateReviews.length) { setActiveReviewId(pendingDuplicateReviews[0].id); setReviewSessionOpen(true); } };
+  const decideQueuedDuplicate = async (decision: "keep" | "upload-as-new" | "replace-existing") => {
+    const review = activeDuplicateReview;
     if (!review) return;
-    setDuplicateReview(null);
-    if (decision === "keep") {
-      removeQueueItem(review.item.id);
-      addActivity("Duplicate upload kept out", `${review.item.file.name} was not added because the existing image was kept`);
-      return;
+    const nextId = pendingDuplicateReviews.find(item => item.id !== review.id)?.id ?? null;
+    try {
+      const result = await decideDuplicateReview.mutateAsync({ candidateId: review.id, decision });
+      addActivity(decision === "keep" ? "Existing image kept" : decision === "upload-as-new" ? "Duplicate uploaded as new" : "Existing image replaced", decision === "keep" ? `${review.filename} stayed out of the library` : `${review.filename} was ${decision === "replace-existing" ? "used to replace the matched image" : "added as a separate unorganised image"}`);
+      removeResolvedReviewQueueItems([review.id]);
+      setActiveReviewId(nextId);
+      await Promise.all([utils.gallery.pendingDuplicateReviews.invalidate(), utils.gallery.publicDashboard.invalidate()]);
+      if (result.aiStatus === "ready") addActivity("Gemini suggestion ready", `${review.filename} has an approval-only suggestion`);
+    } catch (error) {
+      addActivity("Review decision could not save", error instanceof Error ? error.message : "Please retry; the candidate remains in Needs Review.");
     }
-    void upload(review.item, { kind: decision, imageId: review.existing.id });
+  };
+  const bulkDecideQueuedDuplicates = async (scope: "similar" | "all", decision: "keep" | "upload-as-new") => {
+    const review = activeDuplicateReview;
+    if (!review) return;
+    const count = scope === "all" ? pendingDuplicateReviews.length : pendingDuplicateReviews.filter(item => item.matchKind === "similar" && item.matchedImageId === review.matchedImageId).length;
+    const action = decision === "keep" ? "keep the existing images" : "upload these as new images";
+    if (!window.confirm(`${action[0].toUpperCase()}${action.slice(1)} for ${count} pending review${count === 1 ? "" : "s"}?`)) return;
+    try {
+      const result = await bulkDecideDuplicateReviews.mutateAsync({ candidateId: review.id, scope, decision });
+      addActivity(scope === "all" ? "All reviews resolved" : "Similar reviews resolved", `${result.resolvedCount} duplicate candidate${result.resolvedCount === 1 ? " was" : "s were"} handled`);
+      removeResolvedReviewQueueItems(result.candidateIds);
+      await Promise.all([utils.gallery.pendingDuplicateReviews.invalidate(), utils.gallery.publicDashboard.invalidate()]);
+    } catch (error) {
+      addActivity("Bulk review could not save", error instanceof Error ? error.message : "Please retry; unresolved candidates remain in Needs Review.");
+    }
   };
   const beginFiles = (files: FileList | File[]) => Array.from(files).forEach(file => {
     const id = crypto.randomUUID();
@@ -269,6 +304,7 @@ export default function Admin() {
       <section className="upload-layout"><div className="upload-main">
         <div className="drop-zone" onDragOver={event => event.preventDefault()} onDrop={(event: DragEvent) => { event.preventDefault(); beginFiles(event.dataTransfer.files); }} onClick={() => fileInput.current?.click()} role="button" tabIndex={0} onKeyDown={event => event.key === "Enter" && fileInput.current?.click()}><input className="hidden-input" ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp,image/avif" multiple onChange={(event: ChangeEvent<HTMLInputElement>) => event.target.files && beginFiles(event.target.files)} /><CloudUpload size={40} strokeWidth={1.25} /><strong>Drop images into your unorganised inbox</strong><span>or click to <em>browse files</em></span><div className="upload-capabilities"><span><Check size={15} /> Fast delivery</span><span><RefreshCw size={15} /> Safe Retry</span><span><Sparkles size={15} /> Automatic Gemini check</span></div></div>
         <Queue queue={queue} onRetry={upload} onCancel={id => xhrs.current[id]?.abort()} onRemove={removeQueueItem} onClear={() => setQueue(current => current.filter(item => !isCompletedUploadQueueItem(item.status)))} />
+        <NeedsReviewInbox reviews={pendingDuplicateReviews} loading={pendingDuplicateReviewsQuery.isLoading} onOpen={openDuplicateReviews} />
         <AiReview images={images} albums={customAlbums} onApprove={(imageId, name, description, assignAlbum) => void approveJewellerySuggestion.mutateAsync({ imageId, name, description, assignAlbum }).then(() => utils.gallery.publicDashboard.invalidate())} onDismiss={imageId => void dismissJewellerySuggestion.mutateAsync({ imageId }).then(() => utils.gallery.publicDashboard.invalidate())} onApproveAll={applyReadyBatch} saving={approveJewellerySuggestion.isPending || dismissJewellerySuggestion.isPending} batchSaving={approveJewelleryBatch.isPending} />
         <section className="library-section"><div className="uncategorized-heading"><div><h2>Unorganised <span>{libraryImages.length}</span></h2><p>Images stay here until you put them into a custom album. Gemini never starts or moves an image by itself.</p></div><div className="image-tools"><button onClick={() => setSelected(selected.length === libraryImages.length ? [] : libraryImages.map(image => image.recordId))}>Select all</button><button className={grid ? "is-active" : ""} onClick={() => setGrid(true)}><Grid2X2 size={16} /></button><button className={!grid ? "is-active" : ""} onClick={() => setGrid(false)}><LayoutList size={16} /></button><button onClick={() => setSortNewest(current => !current)}>Sort: {sortNewest ? "Newest" : "Name"} <ArrowDownUp size={14} /></button></div></div><SmartBar smartAlbums={smartAlbums} />{isLoading ? <AdminImageGridSkeleton /> : libraryImages.length ? <ImageGrid images={libraryImages} selected={selected} onToggle={id => setSelected(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id])} list={grid ? false : true} /> : <div className="admin-empty-state"><ImageIcon size={23} /><h2>Everything is organized.</h2><p>New uploads stay here until you decide what belongs in an album.</p></div>}</section>
       </div><aside className="contextual-panel album-context-panel"><div className="contextual-heading"><h2>Albums & views</h2><Sparkles size={16} /></div>{systemAlbum && <div className="smart-side-row permanent-side-row"><span className="smart-symbol library"><Monitor size={13} /></span><div><b>All Images</b><small>{systemAlbum.imageCount} images · permanent</small></div></div>}{smartAlbums.map(view => <div className="smart-side-row" key={view.id}><span className={`smart-symbol ${view.id}`}><Monitor size={13} /></span><div><b>{view.name}</b><small>{view.imageCount} images</small></div></div>)}<div className="organize-note"><b>One custom album per image</b><p>All Images preserves every upload. Gemini automatically suggests a name, description, and one album idea for new unorganised uploads.</p><p>Suggestions stay editable and nothing moves until you apply them.</p></div></aside></section>
@@ -277,15 +313,21 @@ export default function Admin() {
     {tab === "albums" && <section className="admin-full-page albums-manager"><div className="admin-page-heading"><div><p className="eyebrow">CUSTOM ALBUMS</p><h1>Arrange your own visual stories.</h1><p>Each image can belong to one custom album. All uploads remain safely available in All Images.</p></div><button className="new-category" onClick={() => openEdit()}><Plus size={16} /> New album</button></div>{isLoading ? <AdminAlbumGridSkeleton /> : customAlbums.length ? <div className="album-manager-grid">{customAlbums.map((album, index) => <article className={`album-manager-card accent-${album.accent}`} key={album.id}><div className="album-manager-cover">{album.cover ? <img src={album.cover} alt="" /> : <span>{album.name.slice(0, 1).toUpperCase()}</span>}<button onClick={() => openEdit(album)} aria-label={`Edit ${album.name}`}><Pencil size={15} /></button></div><div className="album-manager-copy"><div><b>{album.name}</b><span>{album.imageCount} {album.imageCount === 1 ? "image" : "images"} · {album.visibility}</span></div><div className="album-reorder"><button disabled={index === 0 || reorderAlbums.isPending} onClick={() => void moveAlbum(index, -1)} aria-label={`Move ${album.name} up`}><ChevronUp size={14} /></button><button disabled={index === customAlbums.length - 1 || reorderAlbums.isPending} onClick={() => void moveAlbum(index, 1)} aria-label={`Move ${album.name} down`}><ChevronDown size={14} /></button><button className="quiet-delete" onClick={() => void removeAlbum(album)} aria-label={`Delete ${album.name}`}><Trash2 size={15} /></button></div></div></article>)}</div> : <div className="admin-empty-state"><FolderPlus size={23} /><h2>No custom albums yet.</h2><p>Create one to curate selected unassigned uploads into a presentable sequence.</p><button className="new-category" onClick={() => openEdit()}>Create album</button></div>}</section>}
     {tab === "presentation" && <PresentationSettings settings={settings} setSettings={setSettings} aiSettings={aiSettings} personalKeyConfigured={Boolean(aiProviderStatus.data?.personalKeyConfigured)} onAiSettingsChange={changes => void updateAiSettings.mutateAsync(changes).then(() => utils.gallery.publicDashboard.invalidate())} savingAiSettings={updateAiSettings.isPending} />}
     {tab === "activity" && <ActivityFeed activity={activity} />}
-  </main><nav className="admin-bottom-nav">{nav.map(item => <button key={item.key} className={tab === item.key ? "is-active" : ""} onClick={() => setTab(item.key)}><item.icon size={19} /><span>{item.label}</span></button>)}</nav></div>{editor && <AlbumEditor draft={editor} coverImages={editor.id ? albumImages(editor.id) : []} onChange={setEditor} onClose={() => setEditor(null)} onSave={() => void saveAlbum()} saving={createAlbum.isPending || updateAlbum.isPending} />}{duplicateReview && <DuplicateReviewDialog review={duplicateReview} onKeep={() => decideDuplicate("keep")} onUploadAsNew={() => decideDuplicate("upload-as-new")} onReplace={() => decideDuplicate("replace-existing")} />}</div>;
+  </main><nav className="admin-bottom-nav">{nav.map(item => <button key={item.key} className={tab === item.key ? "is-active" : ""} onClick={() => setTab(item.key)}><item.icon size={19} /><span>{item.label}</span></button>)}</nav></div>{editor && <AlbumEditor draft={editor} coverImages={editor.id ? albumImages(editor.id) : []} onChange={setEditor} onClose={() => setEditor(null)} onSave={() => void saveAlbum()} saving={createAlbum.isPending || updateAlbum.isPending} />}{activeDuplicateReview && <DuplicateReviewDialog review={activeDuplicateReview} reviewCount={pendingDuplicateReviews.length} busy={decideDuplicateReview.isPending || bulkDecideDuplicateReviews.isPending} onClose={() => { setReviewSessionOpen(false); setActiveReviewId(null); }} onKeep={() => void decideQueuedDuplicate("keep")} onUploadAsNew={() => void decideQueuedDuplicate("upload-as-new")} onReplace={() => void decideQueuedDuplicate("replace-existing")} onApplySimilar={decision => void bulkDecideQueuedDuplicates("similar", decision)} onApplyAll={() => void bulkDecideQueuedDuplicates("all", "keep")} />}</div>;
 }
 
 function Queue({ queue, onRetry, onCancel, onRemove, onClear }: { queue: QueueItem[]; onRetry: (item: QueueItem) => Promise<void>; onCancel: (id: string) => void; onRemove: (id: string) => void; onClear: () => void }) { const completedCount = queue.filter(item => isCompletedUploadQueueItem(item.status)).length; return <section className="upload-queue"><div className="queue-heading"><h2>Upload activity <span>{queue.length}</span></h2><button onClick={onClear} disabled={completedCount === 0}>Clear completed</button></div>{queue.length === 0 ? <div className="queue-empty">Uploads and their status will appear here.</div> : <div className="queue-list">{queue.map(item => { const retry = canRetryUploadQueueItem(item.status) ? <button className="queue-retry-button" onClick={() => void onRetry(item)}><RefreshCw size={15} /> Retry upload</button> : null; return <div className="queue-row" key={item.id}><div className="queue-thumb">{item.preview ? <img src={item.preview} alt="" decoding="async" /> : <ImageIcon size={18} />}</div><div className="queue-file"><b>{item.file.name}</b><span>{(item.file.size / (1024 * 1024)).toFixed(1)} MB</span><div className="progress-track"><i style={{ width: `${item.progress}%` }} /></div>{item.error && <small className={item.status === "failed" ? "status-error" : "status-note"}>{item.error}</small>}</div><div className="queue-status">{item.status === "complete" ? <><span>Ready</span><Check className="status-success" size={16} /></> : item.status === "stored" ? <><span>Stored</span><Check className="status-success" size={16} /></> : item.status === "duplicate" ? <span>Review needed</span> : item.status === "failed" ? retry : item.status === "cancelled" ? <span className="queue-cancelled-actions">{retry}{canRemoveUploadQueueItem(item.status) && <button className="queue-clear-action" onClick={() => onRemove(item.id)}><X size={15} /> Clear</button>}</span> : <><span>{item.status === "indexing" ? "Indexing" : item.status === "checking" ? "Checking" : `${item.progress}%`}</span><button onClick={() => onCancel(item.id)} aria-label="Cancel upload"><X size={15} /></button></>}</div></div>; })}</div>}</section>; }
 
-function DuplicateReviewDialog({ review, onKeep, onUploadAsNew, onReplace }: { review: DuplicateReview; onKeep: () => void; onUploadAsNew: () => void; onReplace: () => void }) {
-  const exact = review.kind === "exact";
+function NeedsReviewInbox({ reviews, loading, onOpen }: { reviews: PendingDuplicateReview[]; loading: boolean; onOpen: () => void }) {
+  if (!loading && !reviews.length) return null;
+  return <section className="needs-review-inbox"><div className="needs-review-icon"><Eye size={18} /></div><div><p className="eyebrow">NEEDS REVIEW</p><h2>{loading ? "Checking review queue…" : `${reviews.length} duplicate ${reviews.length === 1 ? "upload" : "uploads"} waiting`}</h2><p>Each candidate is stored safely outside your library until you decide what should happen.</p></div><button className="dark-button" disabled={loading || !reviews.length} onClick={onOpen}>{loading ? "Loading…" : `Review next${reviews.length > 1 ? ` · ${reviews.length}` : ""}`}</button></section>;
+}
+
+function DuplicateReviewDialog({ review, reviewCount, busy, onClose, onKeep, onUploadAsNew, onReplace, onApplySimilar, onApplyAll }: { review: PendingDuplicateReview; reviewCount: number; busy: boolean; onClose: () => void; onKeep: () => void; onUploadAsNew: () => void; onReplace: () => void; onApplySimilar: (decision: "keep" | "upload-as-new") => void; onApplyAll: () => void }) {
+  const exact = review.matchKind === "exact";
   const existingSource = review.existing.previewUrl ?? review.existing.thumbnailUrl ?? review.existing.originalUrl;
-  return <Dialog open onOpenChange={open => { if (!open) onKeep(); }}><DialogContent className="duplicate-dialog" showCloseButton={false}><DialogHeader><p className="eyebrow">{exact ? "EXACT DUPLICATE BLOCKED" : "POSSIBLE DUPLICATE REVIEW"}</p><DialogTitle>{exact ? "This image already exists." : `${review.similarity}% visual match found.`}</DialogTitle><DialogDescription>{exact ? "Movement has stopped this exact repeat before adding another copy." : "Compare both images carefully before deciding whether this is a separate design."}</DialogDescription></DialogHeader><div className="duplicate-comparison"><section><p>New upload</p><img src={review.item.preview} alt={`New upload: ${review.item.file.name}`} /><b>{review.item.file.name}</b><span>{(review.item.file.size / 1024 / 1024).toFixed(1)} MB · not added</span></section><span className="duplicate-compare-divider">↔</span><section><p>Existing image</p><img src={existingSource} alt={`Existing image: ${review.existing.filename}`} /><b>{review.existing.filename}</b><span>{review.existing.width && review.existing.height ? `${review.existing.width} × ${review.existing.height}` : "In your library"}</span></section></div><div className="duplicate-actions">{exact ? <button className="dark-button" onClick={onKeep}>Keep existing image</button> : <><button className="secondary-button" onClick={onKeep}>Keep existing</button><button className="secondary-button" onClick={onUploadAsNew}>Upload as new</button><button className="duplicate-replace" onClick={onReplace}>Replace existing</button></>}</div>{!exact && <p className="duplicate-safety-note">Replacing updates the existing image in place, preserves its album placement, and leaves any new Gemini suggestion for your approval.</p>}</DialogContent></Dialog>;
+  const candidateSource = review.previewUrl ?? review.thumbnailUrl ?? review.originalUrl;
+  return <Dialog open onOpenChange={open => { if (!open && !busy) onClose(); }}><DialogContent className="duplicate-dialog" showCloseButton={!busy}><DialogHeader><p className="eyebrow">{exact ? "EXACT DUPLICATE BLOCKED" : "POSSIBLE DUPLICATE REVIEW"} · {reviewCount} OPEN</p><DialogTitle>{exact ? "This image already exists." : `${review.similarity}% visual match found.`}</DialogTitle><DialogDescription>{exact ? "The candidate is stored safely for this review, but exact repeats cannot create another library image." : "Compare both images carefully before deciding whether this is a distinct design."}</DialogDescription></DialogHeader><div className="duplicate-comparison"><section><p>New upload</p><img src={candidateSource} alt={`New upload: ${review.filename}`} /><b>{review.filename}</b><span>{(review.fileSize / 1024 / 1024).toFixed(1)} MB · awaiting decision</span></section><span className="duplicate-compare-divider">↔</span><section><p>Existing image</p>{existingSource ? <img src={existingSource} alt={`Existing image: ${review.existing.filename ?? "matched image"}`} /> : <div className="review-image-unavailable">Image unavailable</div>}<b>{review.existing.filename ?? "Matched image"}</b><span>{review.existing.width && review.existing.height ? `${review.existing.width} × ${review.existing.height}` : "In your library"}</span></section></div><div className="duplicate-actions">{exact ? <button className="dark-button" disabled={busy} onClick={onKeep}>{busy ? "Saving…" : "Keep old image"}</button> : <><button className="secondary-button" disabled={busy} onClick={onKeep}>Keep old image</button><button className="secondary-button" disabled={busy} onClick={onUploadAsNew}>Upload as new</button><button className="duplicate-replace" disabled={busy} onClick={onReplace}>Replace with new</button></>}</div><div className="duplicate-bulk-actions">{!exact && <><button disabled={busy} onClick={() => onApplySimilar("keep")}>Apply to Similar · Keep old</button><button disabled={busy} onClick={() => onApplySimilar("upload-as-new")}>Apply to Similar · Upload new</button></>}<button disabled={busy || reviewCount < 2} onClick={onApplyAll}>Apply to All · Keep old ({reviewCount})</button></div>{!exact && <p className="duplicate-safety-note">Replacing updates the existing image in place, preserves its album placement, and creates only a pending Gemini suggestion for your approval. Replacement is always one image at a time.</p>}</DialogContent></Dialog>;
 }
 
 function SmartBar({ smartAlbums }: { smartAlbums: ReturnType<typeof usePersistedGallery>["smartAlbums"] }) { return <div className="smart-library-bar">{smartAlbums.map(view => <span key={view.id}><Sparkles size={13} /> {view.name}: {view.imageCount}</span>)}</div>; }

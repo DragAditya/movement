@@ -146,3 +146,8 @@
 - [x] Verify the visual-match Upload as new decision creates one unorganised record with no automatic album move.
 - [x] Verify the visual-match Replace existing decision updates the reviewed record while preserving its membership and approval-only Gemini behavior.
 - [x] Align replacement guidance with its preserved-membership and no-automatic-move behavior.
+- [x] Persist every detected duplicate in a durable Needs Review queue so page refreshes and later uploads cannot lose unresolved candidates.
+- [x] Let all uploads in a batch continue independently while duplicate candidates wait for review rather than blocking the rest of the batch.
+- [x] Build one-by-one duplicate review that automatically advances after each decision and shows remaining queue progress.
+- [x] Add scoped Apply to similar and Apply to all decisions with clear counts and safe exact-versus-visual behavior.
+- [x] Verify multi-duplicate batches, decision persistence, no silent unresolved candidates, and responsive mobile queue controls.

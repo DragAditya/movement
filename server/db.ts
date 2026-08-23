@@ -1,8 +1,9 @@
-import { and, desc, eq, inArray, isNull, ne } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { aiSettings, albumImages, albums, galleryImages, InsertUser, users } from "../drizzle/schema";
+import { aiSettings, albumImages, albums, duplicateReviewCandidates, galleryImages, InsertUser, users } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { isMutableAlbum } from "./albumRules";
+import { isDuplicateReviewBulkDecisionAllowed, isDuplicateReviewDecisionAllowed, isInSimilarReviewScope, type DuplicateReviewDecision } from "./duplicateReviewPolicy";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -121,6 +122,147 @@ export async function createGalleryImage(input: GalleryImageInput) {
   await db.insert(galleryImages).values({ ...input, smartGroup: classifyImage(input) });
   const [image] = await db.select().from(galleryImages).where(eq(galleryImages.originalKey, input.originalKey)).limit(1);
   return image;
+}
+
+export type DuplicateReviewCandidateInput = GalleryImageInput & {
+  matchKind: "exact" | "similar";
+  matchedImageId: number;
+  distance: number;
+  similarity: number;
+  contentHash: string;
+  visualHash: string;
+};
+
+const pendingDuplicateCandidateView = {
+  id: duplicateReviewCandidates.id,
+  matchKind: duplicateReviewCandidates.matchKind,
+  matchedImageId: duplicateReviewCandidates.matchedImageId,
+  distance: duplicateReviewCandidates.distance,
+  similarity: duplicateReviewCandidates.similarity,
+  originalKey: duplicateReviewCandidates.originalKey,
+  originalUrl: duplicateReviewCandidates.originalUrl,
+  thumbnailUrl: duplicateReviewCandidates.thumbnailUrl,
+  previewUrl: duplicateReviewCandidates.previewUrl,
+  filename: duplicateReviewCandidates.filename,
+  mimeType: duplicateReviewCandidates.mimeType,
+  fileSize: duplicateReviewCandidates.fileSize,
+  contentHash: duplicateReviewCandidates.contentHash,
+  visualHash: duplicateReviewCandidates.visualHash,
+  width: duplicateReviewCandidates.width,
+  height: duplicateReviewCandidates.height,
+  createdAt: duplicateReviewCandidates.createdAt,
+  existing: {
+    id: galleryImages.id,
+    filename: galleryImages.filename,
+    originalUrl: galleryImages.originalUrl,
+    thumbnailUrl: galleryImages.thumbnailUrl,
+    previewUrl: galleryImages.previewUrl,
+    width: galleryImages.width,
+    height: galleryImages.height,
+    createdAt: galleryImages.createdAt,
+  },
+};
+
+export async function createDuplicateReviewCandidate(input: DuplicateReviewCandidateInput) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.insert(duplicateReviewCandidates).values(input);
+  const [candidate] = await db.select().from(duplicateReviewCandidates).where(eq(duplicateReviewCandidates.originalKey, input.originalKey)).limit(1);
+  return candidate;
+}
+
+export async function listPendingDuplicateReviewCandidates() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select(pendingDuplicateCandidateView)
+    .from(duplicateReviewCandidates)
+    .leftJoin(galleryImages, eq(duplicateReviewCandidates.matchedImageId, galleryImages.id))
+    .where(eq(duplicateReviewCandidates.status, "pending"))
+    .orderBy(asc(duplicateReviewCandidates.createdAt), asc(duplicateReviewCandidates.id));
+}
+
+async function getDuplicateReviewCandidate(candidateId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const [candidate] = await db.select().from(duplicateReviewCandidates).where(eq(duplicateReviewCandidates.id, candidateId)).limit(1);
+  if (!candidate) throw new Error("This duplicate review item no longer exists.");
+  return { db, candidate };
+}
+
+function galleryImageInputFromCandidate(candidate: {
+  originalKey: string;
+  originalUrl: string;
+  thumbnailUrl: string | null;
+  previewUrl: string | null;
+  filename: string;
+  mimeType: string;
+  fileSize: number;
+  contentHash: string;
+  visualHash: string;
+  width: number | null;
+  height: number | null;
+}) {
+  return {
+    originalKey: candidate.originalKey,
+    originalUrl: candidate.originalUrl,
+    thumbnailUrl: candidate.thumbnailUrl ?? undefined,
+    previewUrl: candidate.previewUrl ?? undefined,
+    filename: candidate.filename,
+    mimeType: candidate.mimeType,
+    fileSize: candidate.fileSize,
+    contentHash: candidate.contentHash,
+    visualHash: candidate.visualHash,
+    width: candidate.width ?? undefined,
+    height: candidate.height ?? undefined,
+  } satisfies GalleryImageInput;
+}
+
+export async function resolveDuplicateReviewCandidate(candidateId: number, decision: DuplicateReviewDecision) {
+  const { db, candidate } = await getDuplicateReviewCandidate(candidateId);
+  if (candidate.status !== "pending") throw new Error("This duplicate review item has already been handled.");
+  if (!isDuplicateReviewDecisionAllowed(candidate.matchKind, decision)) throw new Error("Exact duplicate uploads can only keep the existing image.");
+  if (decision === "replace-existing" && candidate.matchKind !== "similar") throw new Error("Only visual matches can replace an existing image.");
+
+  const [claim] = await db.update(duplicateReviewCandidates)
+    .set({ status: "processing" })
+    .where(and(eq(duplicateReviewCandidates.id, candidateId), eq(duplicateReviewCandidates.status, "pending")));
+  if (!claim.affectedRows) throw new Error("This duplicate review item is already being handled.");
+
+  try {
+    let imageId: number | null = null;
+    if (decision === "upload-as-new") {
+      const image = await createGalleryImage(galleryImageInputFromCandidate(candidate));
+      imageId = image.id;
+    } else if (decision === "replace-existing") {
+      const existing = await getGalleryImage(candidate.matchedImageId);
+      if (!existing) throw new Error("The existing image is no longer available to replace.");
+      const image = await replaceGalleryImage(candidate.matchedImageId, galleryImageInputFromCandidate(candidate));
+      imageId = image?.id ?? candidate.matchedImageId;
+    }
+    const status = decision === "keep" ? "kept" : decision === "upload-as-new" ? "uploaded" : "replaced";
+    await db.update(duplicateReviewCandidates).set({ status, decision: decision.replace(/-/g, "_") as "keep" | "upload_as_new" | "replace_existing", resolvedAt: new Date() }).where(eq(duplicateReviewCandidates.id, candidateId));
+    return { candidate, decision, imageId };
+  } catch (error) {
+    await db.update(duplicateReviewCandidates).set({ status: "pending" }).where(eq(duplicateReviewCandidates.id, candidateId));
+    throw error;
+  }
+}
+
+export async function resolveDuplicateReviewBulk(input: { scope: "similar" | "all"; candidateId: number; decision: "keep" | "upload-as-new" }) {
+  const { db, candidate } = await getDuplicateReviewCandidate(input.candidateId);
+  if (candidate.status !== "pending") throw new Error("This duplicate review item has already been handled.");
+  if (!isDuplicateReviewBulkDecisionAllowed(input.scope, candidate.matchKind, input.decision)) throw new Error(input.scope === "all" ? "Applying to all is limited to keeping existing images for safety." : "Apply to similar is available only for visual matches.");
+
+  const where = input.scope === "all"
+    ? eq(duplicateReviewCandidates.status, "pending")
+    : and(eq(duplicateReviewCandidates.status, "pending"), eq(duplicateReviewCandidates.matchKind, "similar"), eq(duplicateReviewCandidates.matchedImageId, candidate.matchedImageId));
+  const candidates = await db.select({ id: duplicateReviewCandidates.id, matchKind: duplicateReviewCandidates.matchKind, matchedImageId: duplicateReviewCandidates.matchedImageId }).from(duplicateReviewCandidates).where(where).orderBy(asc(duplicateReviewCandidates.createdAt), asc(duplicateReviewCandidates.id));
+  const resolved = [] as Array<Awaited<ReturnType<typeof resolveDuplicateReviewCandidate>>>;
+  for (const item of candidates) {
+    if (input.scope === "similar" && !isInSimilarReviewScope(item, candidate)) continue;
+    resolved.push(await resolveDuplicateReviewCandidate(item.id, input.decision));
+  }
+  return { resolvedCount: resolved.length, candidateIds: resolved.map(item => item.candidate.id), imageIds: resolved.map(item => item.imageId).filter((id): id is number => id !== null) };
 }
 
 export async function listGalleryDuplicateCandidates() {

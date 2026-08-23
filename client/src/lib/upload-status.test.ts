@@ -6,6 +6,10 @@ describe("upload result reconciliation", () => {
     expect(resolveUploadResponse(201, { stored: true, persisted: true })).toBe("complete");
   });
 
+  it("routes an accepted duplicate candidate to Needs Review without reconciliation", () => {
+    expect(resolveUploadResponse(202, { stored: true, reviewPending: true, reviewId: 91 })).toBe("review");
+  });
+
   it("reconciles a stored image whose database record is still pending", () => {
     expect(resolveUploadResponse(202, { stored: true, persisted: false, key: "gallery/x", url: "/manus-storage/x", filename: "x.png", mimeType: "image/png", fileSize: 42 })).toBe("reconcile");
   });

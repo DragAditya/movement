@@ -4,7 +4,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import * as db from "./db";
-import { runJewelleryBatch } from "./jewelleryAi";
+import { runJewelleryBatch, runNewJewelleryAnalysis, runReplacementJewelleryAnalysis } from "./jewelleryAi";
 
 const presentationMode = z.enum(["standard", "immersive", "kiosk"]);
 const visibility = z.enum(["public", "private"]);
@@ -40,6 +40,21 @@ export const appRouter = router({
     }),
     deleteAlbum: publicProcedure.input(z.object({ albumId: z.number().int().positive() })).mutation(async ({ input }) => { await db.deleteAlbum(input.albumId); return { success: true }; }),
     deleteImages: publicProcedure.input(z.object({ imageIds: z.array(z.number().int().positive()).min(1) })).mutation(async ({ input }) => { await db.permanentlyDeleteImages(input.imageIds); return { success: true, deletedCount: input.imageIds.length }; }),
+    pendingDuplicateReviews: publicProcedure.query(() => db.listPendingDuplicateReviewCandidates()),
+    decideDuplicateReview: publicProcedure.input(z.object({ candidateId: z.number().int().positive(), decision: z.enum(["keep", "upload-as-new", "replace-existing"]) })).mutation(async ({ input }) => {
+      const result = await db.resolveDuplicateReviewCandidate(input.candidateId, input.decision);
+      const aiStatus = result.imageId
+        ? input.decision === "replace-existing"
+          ? await runReplacementJewelleryAnalysis(result.imageId)
+          : await runNewJewelleryAnalysis(result.imageId)
+        : undefined;
+      return { ...result, aiStatus: aiStatus?.status };
+    }),
+    bulkDecideDuplicateReviews: publicProcedure.input(z.object({ candidateId: z.number().int().positive(), scope: z.enum(["similar", "all"]), decision: z.enum(["keep", "upload-as-new"]) })).mutation(async ({ input }) => {
+      const result = await db.resolveDuplicateReviewBulk(input);
+      const aiResults = await Promise.all(result.imageIds.map(imageId => runNewJewelleryAnalysis(imageId)));
+      return { ...result, aiStatuses: aiResults.map(item => item.status) };
+    }),
     setAlbumImages: publicProcedure.input(z.object({ albumId: z.number().int().positive(), imageIds: z.array(z.number().int().positive()) })).mutation(async ({ input }) => { await db.setAlbumImages(input.albumId, input.imageIds); return { success: true }; }),
     reorderAlbums: publicProcedure.input(z.object({ albumIds: z.array(z.number().int().positive()).min(1) })).mutation(async ({ input }) => { await db.reorderAlbums(input.albumIds); return { success: true }; }),
     aiSettings: publicProcedure.query(() => db.getAiSettings()),

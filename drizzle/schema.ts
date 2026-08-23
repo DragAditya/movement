@@ -1,4 +1,4 @@
-import { boolean, int, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
+import { boolean, index, int, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -50,6 +50,33 @@ export const galleryImages = mysqlTable("galleryImages", {
   smartGroup: mysqlEnum("smartGroup", ["personal", "screens", "projects"]).default("personal").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
+
+/**
+ * Candidate media that matched an existing gallery image during upload.
+ * Candidates remain outside galleryImages until an explicit review decision.
+ */
+export const duplicateReviewCandidates = mysqlTable("duplicateReviewCandidates", {
+  id: int("id").autoincrement().primaryKey(),
+  status: mysqlEnum("status", ["pending", "processing", "kept", "uploaded", "replaced"]).default("pending").notNull(),
+  matchKind: mysqlEnum("matchKind", ["exact", "similar"]).notNull(),
+  matchedImageId: int("matchedImageId").notNull(),
+  distance: int("distance").notNull(),
+  similarity: int("similarity").notNull(),
+  originalKey: varchar("originalKey", { length: 512 }).notNull(),
+  originalUrl: text("originalUrl").notNull(),
+  thumbnailUrl: text("thumbnailUrl"),
+  previewUrl: text("previewUrl"),
+  filename: varchar("filename", { length: 255 }).notNull(),
+  mimeType: varchar("mimeType", { length: 100 }).notNull(),
+  fileSize: int("fileSize").notNull(),
+  contentHash: varchar("contentHash", { length: 64 }).notNull(),
+  visualHash: varchar("visualHash", { length: 16 }).notNull(),
+  width: int("width"),
+  height: int("height"),
+  decision: mysqlEnum("decision", ["keep", "upload_as_new", "replace_existing"]),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  resolvedAt: timestamp("resolvedAt"),
+}, table => [index("duplicateReviewCandidates_pending_created_idx").on(table.status, table.createdAt), index("duplicateReviewCandidates_match_idx").on(table.matchKind, table.matchedImageId, table.status)]);
 
 export const aiSettings = mysqlTable("aiSettings", {
   id: int("id").autoincrement().primaryKey(),
@@ -112,6 +139,7 @@ export const activityEvents = mysqlTable("activityEvents", {
 });
 
 export type GalleryImage = typeof galleryImages.$inferSelect;
+export type DuplicateReviewCandidate = typeof duplicateReviewCandidates.$inferSelect;
 export type Album = typeof albums.$inferSelect;
 export type AlbumImage = typeof albumImages.$inferSelect;
 export type AiSettings = typeof aiSettings.$inferSelect;

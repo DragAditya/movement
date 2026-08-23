@@ -12,6 +12,8 @@ export type UploadResponsePayload = {
   height?: number;
   imageId?: number;
   replaced?: boolean;
+  reviewPending?: boolean;
+  reviewId?: number;
   contentHash?: string;
   visualHash?: string;
   duplicate?: {
@@ -23,10 +25,11 @@ export type UploadResponsePayload = {
   error?: string;
 };
 
-export type UploadResolution = "complete" | "reconcile" | "stored" | "failed" | "checking";
+export type UploadResolution = "complete" | "review" | "reconcile" | "stored" | "failed" | "checking";
 export type UploadQueueStatus = "pending" | "uploading" | "indexing" | "stored" | "complete" | "failed" | "checking" | "cancelled" | "duplicate";
 
 export function resolveUploadResponse(status: number, payload: UploadResponsePayload): UploadResolution {
+  if (status >= 200 && status < 300 && payload.reviewPending) return "review";
   if (status >= 200 && status < 300 && payload.stored) {
     if (payload.persisted) return "complete";
     if (payload.key && payload.url && payload.filename && payload.mimeType && payload.fileSize) return "reconcile";
