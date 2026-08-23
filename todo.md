@@ -151,3 +151,6 @@
 - [x] Build one-by-one duplicate review that automatically advances after each decision and shows remaining queue progress.
 - [x] Add scoped Apply to similar and Apply to all decisions with clear counts and safe exact-versus-visual behavior.
 - [x] Verify multi-duplicate batches, decision persistence, no silent unresolved candidates, and responsive mobile queue controls.
+- [ ] Create the requested public GitHub repository named movement and publish the complete verified project.
+- [x] Add an easy-language README covering Movement, local setup, environment variables, and Vercel deployment.
+- [ ] Verify the remote repository contents and document the published repository link.
