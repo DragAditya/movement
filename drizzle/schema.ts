@@ -30,6 +30,7 @@ export const galleryImages = mysqlTable("galleryImages", {
   originalKey: varchar("originalKey", { length: 512 }).notNull(),
   originalUrl: text("originalUrl").notNull(),
   thumbnailUrl: text("thumbnailUrl"),
+  previewUrl: text("previewUrl"),
   filename: varchar("filename", { length: 255 }).notNull(),
   mimeType: varchar("mimeType", { length: 100 }).notNull(),
   fileSize: int("fileSize").notNull(),

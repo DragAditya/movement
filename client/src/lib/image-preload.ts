@@ -8,6 +8,10 @@ export function resolveThumbnailSource(thumbnailUrl: string | null | undefined, 
   return thumbnailUrl ?? originalUrl;
 }
 
+export function resolvePreviewSource(previewUrl: string | null | undefined, thumbnailUrl: string | null | undefined, originalUrl: string) {
+  return previewUrl ?? resolveThumbnailSource(thumbnailUrl, originalUrl);
+}
+
 export function warmGalleryImages(sources: string[], createImage: () => HTMLImageElement = () => new Image()) {
   const uniqueSources = Array.from(new Set(sources.filter(Boolean))).slice(0, 40);
   uniqueSources.forEach(source => {

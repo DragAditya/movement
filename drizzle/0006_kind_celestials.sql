@@ -1,0 +1,1 @@
+ALTER TABLE `galleryImages` ADD `previewUrl` text;

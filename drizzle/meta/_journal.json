@@ -43,6 +43,13 @@
       "when": 1787476670580,
       "tag": "0005_blushing_nomad",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1787496081609,
+      "tag": "0006_kind_celestials",
+      "breakpoints": true
     }
   ]
 }

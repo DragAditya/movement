@@ -94,6 +94,7 @@ export type GalleryImageInput = {
   originalKey: string;
   originalUrl: string;
   thumbnailUrl?: string;
+  previewUrl?: string;
   filename: string;
   mimeType: string;
   fileSize: number;
@@ -134,6 +135,22 @@ export async function saveGalleryThumbnail(imageId: number, thumbnailUrl: string
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   await db.update(galleryImages).set({ thumbnailUrl }).where(eq(galleryImages.id, imageId));
+}
+
+export async function listGalleryImagesMissingPreviews(limit = 32) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({ id: galleryImages.id, originalKey: galleryImages.originalKey, filename: galleryImages.filename })
+    .from(galleryImages)
+    .where(isNull(galleryImages.previewUrl))
+    .orderBy(desc(galleryImages.createdAt))
+    .limit(limit);
+}
+
+export async function saveGalleryPreview(imageId: number, previewUrl: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.update(galleryImages).set({ previewUrl }).where(eq(galleryImages.id, imageId));
 }
 
 export type AiProvider = "builtin" | "personal";

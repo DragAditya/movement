@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { imageLoadAttributes, resolveThumbnailSource, warmGalleryImages } from "./image-preload";
+import { imageLoadAttributes, resolvePreviewSource, resolveThumbnailSource, warmGalleryImages } from "./image-preload";
 
 describe("gallery image readiness", () => {
   it("prioritizes the first visible images and defers later tiles", () => {
@@ -22,5 +22,10 @@ describe("gallery image readiness", () => {
   it("uses a persisted thumbnail for compact media while retaining an original fallback", () => {
     expect(resolveThumbnailSource("/thumb.jpg", "/original.jpg")).toBe("/thumb.jpg");
     expect(resolveThumbnailSource(null, "/original.jpg")).toBe("/original.jpg");
+  });
+
+  it("uses the smallest persisted preview for compact tile delivery", () => {
+    expect(resolvePreviewSource("/preview.jpg", "/thumb.jpg", "/original.jpg")).toBe("/preview.jpg");
+    expect(resolvePreviewSource(null, "/thumb.jpg", "/original.jpg")).toBe("/thumb.jpg");
   });
 });

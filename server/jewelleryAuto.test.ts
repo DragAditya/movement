@@ -18,7 +18,7 @@ vi.mock("./db", () => dbMocks);
 vi.mock("./_core/llm", () => llmMocks);
 vi.mock("./storage", () => ({ storageGetSignedUrl: vi.fn() }));
 
-import { runNewJewelleryAnalysis } from "./jewelleryAi";
+import { runJewelleryBatch, runNewJewelleryAnalysis } from "./jewelleryAi";
 
 const automaticSettings = {
   id: 1,
@@ -52,5 +52,11 @@ describe("automatic new-upload jewellery analysis", () => {
     expect(dbMocks.markImageAiStatus).toHaveBeenNthCalledWith(1, 22, "queued");
     expect(dbMocks.markImageAiStatus).toHaveBeenNthCalledWith(2, 22, "analyzing");
     expect(dbMocks.saveJewellerySuggestion).toHaveBeenCalledWith(expect.objectContaining({ imageId: 22, name: "Gold Ring", description: "Gold floral ring.", suggestedAlbumId: null, suggestedNewAlbum: "Rings" }));
+  });
+
+  it("lets a selected unorganised image be manually sent back to Gemini without assigning an album", async () => {
+    await expect(runJewelleryBatch([22, 99])).resolves.toEqual({ status: "complete", results: [{ imageId: 22, status: "ready" }], skippedIds: [99] });
+    expect(dbMocks.getUnorganisedGalleryImages).toHaveBeenCalledWith([22, 99]);
+    expect(dbMocks.saveJewellerySuggestion).toHaveBeenCalledWith(expect.objectContaining({ imageId: 22, suggestedAlbumId: null, suggestedNewAlbum: "Rings" }));
   });
 });

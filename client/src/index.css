@@ -134,10 +134,21 @@ button:not(:disabled):focus-visible { box-shadow: 0 0 0 4px rgba(111,102,255,.15
 @media (max-width: 780px) { .ai-review-heading { align-items: flex-start; gap: 10px; }.ai-review-batch-action { flex-direction: column; align-items: flex-end; gap: 5px; }.ai-review-intro { margin-bottom: 12px; }.gemini-batch-action { order: -1; }.albums-manager .admin-page-heading { align-items: stretch; flex-direction: column; gap: 14px; }.albums-manager .new-category { width: 100%; min-height: 46px; justify-content: center; }.album-manager-grid { display: grid; grid-template-columns: 1fr; gap: 11px; }.album-manager-card { display: grid; grid-template-columns: 112px minmax(0,1fr); min-height: 126px; overflow: hidden; border-radius: 13px; }.album-manager-cover { min-height: 126px; height: 100%; border-radius: 0; }.album-manager-cover > img { width: 100%; height: 100%; object-fit: cover; }.album-manager-cover button { right: 8px; bottom: 8px; }.album-manager-copy { min-height: 126px; padding: 16px 13px 14px; }.album-reorder { justify-content: flex-start; margin-top: 11px; }.album-reorder > button { width: 28px; height: 28px; } }
 
 /* Studio mobile refinement and responsive image readiness. */
-.admin-image-card, .album-manager-card, .detail-image, .latest-image { content-visibility: auto; contain-intrinsic-size: auto 220px; }
+.admin-image-card, .album-manager-card, .latest-image { content-visibility: auto; contain-intrinsic-size: auto 220px; }
 .admin-image-frame img, .album-manager-cover img, .ai-review-card > img { image-rendering: auto; }
 .queue-retry-button { min-height: 31px !important; padding: 0 9px !important; display: inline-flex !important; align-items: center; justify-content: center; gap: 5px; border: 1px solid #d9d3fa !important; border-radius: 6px !important; color: #4c3ccc !important; background: #f7f5ff !important; font-weight: 700; white-space: nowrap; }
 .queue-retry-button:hover { border-color: #9c91ef !important; background: #efecff !important; }
+.bulk-action-bar .send-to-ai { min-height: 36px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid #cfc7ff; border-radius: 7px; color: #4534bf; background: #f2f0ff; font-weight: 750; }
+.bulk-action-bar .send-to-ai:hover:not(:disabled) { border-color: #8d80ef; background: #eae7ff; }
+.bulk-action-bar .send-to-ai:disabled { color: #9a95ab; border-color: #ebe8f0; background: #f8f7fa; }
+.admin-image-frame { background: #f4f2f7; }
+.gallery-preview-media { position: relative; display: block; width: 100%; height: 100%; overflow: hidden; background: #f2f0f4; }
+.gallery-preview-media::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg,#eeebf0 8%,#faf9fb 18%,#eeebf0 33%); background-size: 220% 100%; animation: skeleton-sheen 1.1s linear infinite; transition: opacity 180ms var(--ease-out); pointer-events: none; }
+.gallery-preview-media img { width: 100%; height: 100%; display: block; object-fit: cover; opacity: 0; transition: opacity 180ms var(--ease-out); }
+.gallery-preview-media.is-loaded::after { opacity: 0; }
+.gallery-preview-media.is-loaded img { opacity: 1; }
+.detail-image .gallery-preview-media { position: relative; inset: auto; opacity: 1; color: inherit; font-size: inherit; text-shadow: none; transition: none; }
+.detail-image:hover .gallery-preview-media { opacity: 1; }
 @media (max-width: 780px) {
   .settings-page .admin-page-heading { margin-bottom: 17px; }
   .settings-page .admin-page-heading h1 { max-width: 300px; font-size: 27px; line-height: 1.05; }
@@ -150,6 +161,7 @@ button:not(:disabled):focus-visible { box-shadow: 0 0 0 4px rgba(111,102,255,.15
   .personal-key-note { margin-top: 8px; padding: 9px; }
   .bulk-action-bar { left: 12px; right: 12px; bottom: 74px; min-height: auto; display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 7px; padding: 8px; overflow: visible; border-radius: 12px; }
   .bulk-action-bar > span { grid-column: 1 / -1; display: block; margin: 0; color: #514a67; font-weight: 700; font-size: 11px; }
+  .bulk-action-bar .send-to-ai { grid-column: 1 / -1; min-height: 38px; font-size: 12px; }
   .bulk-action-bar .move-picker { min-width: 0; width: 100%; justify-content: space-between; }
   .bulk-action-bar .move-picker select { min-width: 0; width: 100%; max-width: none; }
   .bulk-action-bar button { min-width: 0; width: 100%; justify-content: center; white-space: nowrap; }

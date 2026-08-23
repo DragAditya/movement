@@ -4,6 +4,7 @@ export type UploadResponsePayload = {
   key?: string;
   url?: string;
   thumbnailUrl?: string;
+  previewUrl?: string;
   filename?: string;
   mimeType?: string;
   fileSize?: number;

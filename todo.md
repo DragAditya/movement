@@ -125,3 +125,14 @@
 - [x] Verify retry recovery, album-guided automatic suggestions, image loading, and all revised mobile Studio views live.
 - [x] Add responsive gallery image delivery so compact tiles do not always download original-resolution media.
 - [x] Verify the final public Home, Albums, and album-detail loading policy live after responsive delivery is in place.
+- [x] Add a visible selected-image Send to AI action for existing unorganised uploads, preserving approval-only album organization.
+- [x] Improve compact gallery image delivery and loading feedback so mobile grids feel faster on slower connections.
+- [x] Test the selected-image AI flow, loading behavior, and mobile selection tray without affecting user album memberships.
+- [x] Add per-tile loading feedback for compact gallery previews on slower connections.
+- [x] Verify compact preview loading across the Library, Home, Albums, and album-detail surfaces.
+- [x] Apply progressive compact-preview feedback consistently to album-detail tiles without affecting their captions.
+- [x] Verify and cover the final progressive-preview behavior across every compact gallery surface.
+- [x] Add focused automated coverage for progressive preview loaded and error states.
+- [x] Capture final visible album-detail preview proof after the semantic wrapper correction.
+- [x] Inspect and document the final 390 px album-detail preview screenshot before publication.
+- [x] Confirm the inspected album-detail screenshot proof is documented before publishing.
