@@ -77,3 +77,9 @@ Live gesture verification confirmed an upward swipe moved the counter from `05 /
 The mobile adaptive-fit capture confirms the full image is contained without crop on the portrait viewport. Together with the loaded wide-screen capture, this validates that the same uploaded image is framed correctly in both horizontal and vertical presentation contexts.
 
 Adaptive fit is now aspect-ratio-aware rather than an alias for contain. It fills only when the source and viewport share the same shape; portrait-on-landscape and landscape-on-portrait combinations deliberately use safe contain framing to preserve the complete image. Focused test coverage includes matched portrait and landscape frames plus both cross-orientation cases. The final suite contains **29 passing tests**, with type checking and production build passing.
+
+## Production Mobile Gesture Repair
+
+The final repair uses a dedicated Touch Events path alongside Pointer Events, with `touch-action: none` on the Immersive surface so mobile browsers do not consume vertical gestures as scroll. A live `TouchEvent` upward swipe advanced the slideshow counter from `05 / 09` to `06 / 09`; a live downward `TouchEvent` invoked the shared exit action. The default framing is now Fill screen, while Fit by image & screen shape and Fit entire image remain available in settings.
+
+The final mobile capture confirms the default Fill screen mode now occupies the full immersive viewport, eliminating the unused framing space that caused the reported fitting issue. The existing fit options remain available when preservation of the entire original frame is preferred.

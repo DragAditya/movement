@@ -34,13 +34,14 @@ export default function SlideshowPlayer({
   const rootRef = useRef<HTMLDivElement>(null);
   const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pointerStart = useRef<{ x: number; y: number; time: number } | null>(null);
+  const touchStart = useRef<{ x: number; y: number; time: number } | null>(null);
   const [index, setIndex] = useState(Math.min(initialIndex, Math.max(images.length - 1, 0)));
   const [playing, setPlaying] = useState(playbackDefaults(mode).autoplay);
   const [controlsVisible, setControlsVisible] = useState(playbackDefaults(mode).controlsVisible);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [interval, setIntervalSeconds] = useState(5);
   const [transition, setTransition] = useState<Transition>("crossfade");
-  const [fit, setFit] = useState<FitMode>("adaptive");
+  const [fit, setFit] = useState<FitMode>("cover");
   const [showCounter, setShowCounter] = useState(true);
   const [showCaptions, setShowCaptions] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -151,12 +152,7 @@ export default function SlideshowPlayer({
     };
   }, [enterImmersiveFullscreen, mode, showControls]);
 
-  const handlePointerUp = (event: React.PointerEvent) => {
-    if (!pointerStart.current) return;
-    const { x, y, time } = pointerStart.current;
-    const deltaX = event.clientX - x;
-    const deltaY = event.clientY - y;
-    pointerStart.current = null;
+  const handleGesture = useCallback((deltaX: number, deltaY: number, time: number) => {
     const gesture = resolveImmersiveGesture({ deltaX, deltaY, elapsedMs: Date.now() - time, mode, verticalNavigation, swipeDownExit, threshold: gestureThreshold });
     if (gesture === "previous") move(-1, true);
     if (gesture === "next") move(1, false);
@@ -165,6 +161,21 @@ export default function SlideshowPlayer({
       void enterImmersiveFullscreen();
       showControls();
     }
+  }, [enterImmersiveFullscreen, exitImmersive, gestureThreshold, mode, move, showControls, swipeDownExit, verticalNavigation]);
+
+  const handlePointerUp = (event: React.PointerEvent) => {
+    if (!pointerStart.current) return;
+    const { x, y, time } = pointerStart.current;
+    pointerStart.current = null;
+    handleGesture(event.clientX - x, event.clientY - y, time);
+  };
+
+  const handleTouchEnd = (event: React.TouchEvent) => {
+    if (!touchStart.current) return;
+    const touch = event.changedTouches[0];
+    const { x, y, time } = touchStart.current;
+    touchStart.current = null;
+    if (touch) handleGesture(touch.clientX - x, touch.clientY - y, time);
   };
 
   if (!images.length) return null;
@@ -177,10 +188,27 @@ export default function SlideshowPlayer({
       ref={rootRef}
       onMouseMove={showControls}
       onPointerDown={event => {
+        if (event.pointerType === "touch") return;
         pointerStart.current = { x: event.clientX, y: event.clientY, time: Date.now() };
       }}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={() => { pointerStart.current = null; }}
+      onPointerMove={event => {
+        if (event.pointerType === "touch") event.preventDefault();
+      }}
+      onPointerUp={event => {
+        if (event.pointerType === "touch") return;
+        handlePointerUp(event);
+      }}
+      onPointerCancel={event => {
+        if (event.pointerType === "touch") return;
+        pointerStart.current = null;
+      }}
+      onTouchStart={event => {
+        const touch = event.touches[0];
+        if (touch) touchStart.current = { x: touch.clientX, y: touch.clientY, time: Date.now() };
+      }}
+      onTouchMove={event => event.preventDefault()}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={() => { touchStart.current = null; }}
       role="dialog"
       aria-modal="true"
       aria-label="Fullscreen slideshow"
@@ -250,9 +278,9 @@ export default function SlideshowPlayer({
           </label>
           <label className="settings-label">Image fitting
             <select value={fit} onChange={event => setFit(event.target.value as FitMode)}>
-              <option value="adaptive">Adaptive fit (recommended)</option>
+              <option value="adaptive">Fit by image & screen shape</option>
               <option value="contain">Fit entire image</option>
-              <option value="cover">Fill screen</option>
+              <option value="cover">Fill screen (recommended)</option>
             </select>
           </label>
           <label className="settings-label">Orientation

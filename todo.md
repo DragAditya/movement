@@ -56,3 +56,6 @@
 - [x] Correct adaptive image fitting so portrait and landscape displays frame the same image without unintended cropping or empty bars.
 - [x] Test gesture actions, exit flow, orientation fitting, and responsive immersive presentation.
 - [x] Implement aspect-ratio-aware adaptive fit selection and verify portrait-on-landscape and landscape-on-portrait framing.
+- [x] Fix real mobile vertical swipe navigation and swipe-down exit handling in Immersive mode.
+- [x] Make the default Immersive framing fill the device viewport reliably for the user’s intended presentation.
+- [x] Verify the repaired touch and fitting behavior through mobile-compatible interaction paths.
