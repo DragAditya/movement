@@ -5,24 +5,27 @@ import AlbumDetail from "@/pages/AlbumDetail";
 import Albums from "@/pages/Albums";
 import NotFound from "@/pages/NotFound";
 import SharedSlideshow from "@/pages/SharedSlideshow";
-import { Route, Switch } from "wouter";
+import { Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 
 function Router() {
+  const [location] = useLocation();
+  const forceReducedMotion = new URLSearchParams(window.location.search).get("motion") === "reduce";
   // make sure to consider if you need authentication for certain routes
   return (
-    <Switch>
-      <Route path={"/"} component={Home} />
-      <Route path={"/albums"} component={Albums} />
-      <Route path={"/albums/:slug"} component={AlbumDetail} />
-      <Route path={"/s/:slug"} component={SharedSlideshow} />
-      <Route path={"/manage"} component={Admin} />
-      <Route path={"/404"} component={NotFound} />
-      {/* Final fallback route */}
-      <Route component={NotFound} />
-    </Switch>
+    <div className={`route-transition${forceReducedMotion ? " motion-reduced" : ""}`} key={location}>
+      <Switch>
+        <Route path={"/"} component={Home} />
+        <Route path={"/albums"} component={Albums} />
+        <Route path={"/albums/:slug"} component={AlbumDetail} />
+        <Route path={"/s/:slug"} component={SharedSlideshow} />
+        <Route path={"/manage"} component={Admin} />
+        <Route path={"/404"} component={NotFound} />
+        <Route component={NotFound} />
+      </Switch>
+    </div>
   );
 }
 

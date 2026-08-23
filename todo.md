@@ -77,3 +77,8 @@
 - [x] Record final full-image visibility evidence for desktop and mobile Immersive presentation.
 - [x] Run and record browser-side portrait and landscape contain-frame calculations for all verified viewport shapes.
 - [x] Add an explicit final QA record for the verified browser contain-frame calculations.
+- [x] Replace gallery branding, product name, and core taglines with the Movement identity and supplied visual direction.
+- [x] Add a reusable premium motion system for navigation, interactive controls, loading, and state changes.
+- [x] Apply restrained hover, press, focus, open/close, and content transition micro-interactions across public, admin, and slideshow views.
+- [x] Verify Motion branding and interactions on desktop and mobile with reduced-motion safeguards.
+- [x] Verify the live reduced-motion experience across public, Studio, modal, and slideshow surfaces.

@@ -1,4 +1,5 @@
 import type { GalleryImage } from "@/data/gallery";
+import { brand } from "@/lib/brand";
 import { nextSlideIndex } from "@/lib/gallery-utils";
 import { orientationLockTarget, playbackDefaults, resolveImmersiveGesture, shouldRevealControls, type OrientationMode } from "@/lib/immersive-policy";
 import {
@@ -211,7 +212,7 @@ export default function SlideshowPlayer({
         <button className="slideshow-icon-button" onClick={() => void exitImmersive()} aria-label="Exit slideshow">
           <X size={20} strokeWidth={1.7} />
         </button>
-        <div className="slideshow-identity">GALLERY</div>
+        <div className="slideshow-identity">{brand.name}</div>
         <div className="slideshow-top-actions">
           <button className="slideshow-icon-button" onClick={() => setSettingsOpen(open => !open)} aria-label="Slideshow settings">
             <Settings2 size={19} strokeWidth={1.7} />

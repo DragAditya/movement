@@ -114,6 +114,16 @@ The final browser-side calculation confirmed the exact contain frames. At deskto
 
 The live browser calculation was completed and saved for all six portrait/landscape and desktop/mobile combinations. It confirms each source is scaled to the largest centered frame that remains fully inside its viewport, with the original aspect ratio retained and no negative or overflowing edge.
 
+## Movement Brand and Motion System
+
+The supplied Movement mark is now deployed as the shared product identity, with a modern geometric wordmark, **Movement** product title, and the tagline **“Your moments, in motion.”** applied across metadata, public navigation, the public hero, Albums, and the presentation player. The public mode is now labelled **Moments** and the management mode **Studio**, retaining the existing information architecture while making the product language cohesive.
+
+The visual system now uses one restrained motion vocabulary: 240ms route fades, staggered content entrances, fast hover and press feedback, focus treatment, animated loading sheen, responsive panel/modal entry, contained slideshow control motion, and a subtle sequenced-motion violet line on the home hero. All nonessential motion is disabled for `prefers-reduced-motion`. Live browser checks confirmed the deployed Movement title, brand mark asset, active navigation treatment, and the `route-enter` animation; desktop and 390px mobile captures verified the public, Albums, and Studio layouts. The final suite reports **35 passing tests**, type checking, and production build completion.
+
+For direct live accessibility verification, `?motion=reduce` now mirrors the system reduced-motion preference. On the public Moments view, the route and hero content reported `animation-name: none` and primary controls a `0.01ms` transition duration. On the Studio Albums view, album cards and the opened New album editor also reported no animation and `0.01ms` transitions, while the editor remained fully functional.
+
+The Immersive slideshow was also tested with reduced motion enabled. Its rendered image and controls both reported `animation-name: none` with `0.01ms` transitions, while the player remained visible and usable. This completes public, Studio/editor, and slideshow coverage for the reduced-motion path.
+
 ## Loading, Upload Queue, and Albums Refinement
 
 Reusable animated skeletons now preserve the layout of the public home page, Albums directory, album detail, Admin Library, Admin Albums workspace, and slideshow entry while their gallery query is unresolved. Rendering coverage verifies every loading surface has an accessible status label and the intended card or media placeholder structure.
