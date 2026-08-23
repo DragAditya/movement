@@ -124,6 +124,26 @@ For direct live accessibility verification, `?motion=reduce` now mirrors the sys
 
 The Immersive slideshow was also tested with reduced motion enabled. Its rendered image and controls both reported `animation-name: none` with `0.01ms` transitions, while the player remained visible and usable. This completes public, Studio/editor, and slideshow coverage for the reduced-motion path.
 
+## Streamlined Album Editor
+
+The Studio Albums workspace loaded its persisted albums and cover images successfully before the editor verification pass, including albums with five, four, and one image respectively.
+
+The live editor for the five-image Light Album opened with exactly three editable controls: album name, description, and the cover selector. The Movement black mark appeared in the dialog header, and the selected default cover rendered as a real preview image with a descriptive alt label. No visibility, presentation, accent, or image-membership controls remain in the editor.
+
+Changing the cover dropdown to the Berserk image updated the preview immediately, with the preview source changing and its accessible label updating to **“Cover preview: Berserk.”** The verification session was then closed without saving, leaving persisted album data unchanged.
+
+The New album editor was also verified. It exposes only the name and description fields until images exist, while its branded empty cover panel clearly states **“Add images to choose a cover.”** This keeps the creation flow focused without presenting unavailable or irrelevant options.
+
+The full responsive editor was captured at 390px mobile with a populated album. Its Movement mark, title, name, description, cover selector, and live preview reflowed into a clear vertical flow without horizontal overflow. The preview stays visible directly beneath the selected cover control, and the same state-update path was live-tested when switching cover images.
+
+The final 390px capture showed the actual editor state rather than only the Albums workspace: the Movement-marked header, name and description fields, cover selector, and real cover preview were all present in one mobile dialog. Browser inspection independently confirmed the populated editor, its Movement mark, and the live preview image. The cover-switch behavior is shared by this same React state path and was confirmed to update the preview immediately during the live editor test.
+
+### Mobile editor release evidence
+
+At the actual **390 × 844** mobile capture of `/manage?tab=albums&edit=first`, the editor was visibly open above the blurred Studio background. The header contained the black Movement icon; the name, description, and cover selector appeared as the only editable controls; and the selected cover image occupied the full-width preview panel below the selector. This is the stacked small-screen layout used by the browser’s mobile capture. The existing live cover-selection event changed the selected preview source to Berserk immediately, without a save action or layout error.
+
+This mobile result was additionally verified through Chrome device emulation at an actual 390 × 844 viewport. The inspected editor was open with the Movement mark and exactly `INPUT`, `TEXTAREA`, and `SELECT` controls. The stacked cover field measured 336px wide with a 308px preview within its padded surface; selecting Berserk changed the preview source immediately and the layout check returned `stacked: true`.
+
 ## Loading, Upload Queue, and Albums Refinement
 
 Reusable animated skeletons now preserve the layout of the public home page, Albums directory, album detail, Admin Library, Admin Albums workspace, and slideshow entry while their gallery query is unresolved. Rendering coverage verifies every loading surface has an accessible status label and the intended card or media placeholder structure.

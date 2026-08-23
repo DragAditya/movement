@@ -82,3 +82,10 @@
 - [x] Apply restrained hover, press, focus, open/close, and content transition micro-interactions across public, admin, and slideshow views.
 - [x] Verify Motion branding and interactions on desktop and mobile with reduced-motion safeguards.
 - [x] Verify the live reduced-motion experience across public, Studio, modal, and slideshow surfaces.
+- [x] Reduce the album editor to name, description, and cover image controls only.
+- [x] Add a live cover-image preview and a clean empty-cover state within the editor.
+- [x] Add the Movement black logo mark and refined mobile-first visual hierarchy to the editor header.
+- [x] Test album creation and editing, including cover preview changes, on desktop and mobile.
+- [x] Verify the simplified branded editor and live cover preview inside a mobile viewport.
+- [x] Capture inspectable 390px editor evidence for the Movement header, stacked controls, and changing cover preview.
+- [x] Record the actual 390px editor screenshot evidence and mobile cover-preview behavior explicitly for release QA.
