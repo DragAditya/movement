@@ -11,11 +11,20 @@ export type UploadResponsePayload = {
   width?: number;
   height?: number;
   imageId?: number;
+  replaced?: boolean;
+  contentHash?: string;
+  visualHash?: string;
+  duplicate?: {
+    kind: "exact" | "similar";
+    distance: number;
+    similarity: number;
+    image: { id: number; filename: string; originalUrl: string; thumbnailUrl?: string | null; previewUrl?: string | null; width?: number | null; height?: number | null; createdAt: string };
+  };
   error?: string;
 };
 
 export type UploadResolution = "complete" | "reconcile" | "stored" | "failed" | "checking";
-export type UploadQueueStatus = "pending" | "uploading" | "indexing" | "stored" | "complete" | "failed" | "checking" | "cancelled";
+export type UploadQueueStatus = "pending" | "uploading" | "indexing" | "stored" | "complete" | "failed" | "checking" | "cancelled" | "duplicate";
 
 export function resolveUploadResponse(status: number, payload: UploadResponsePayload): UploadResolution {
   if (status >= 200 && status < 300 && payload.stored) {

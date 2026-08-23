@@ -176,3 +176,20 @@ button:not(:disabled):focus-visible { box-shadow: 0 0 0 4px rgba(111,102,255,.15
   .album-reorder > button { width: 27px; height: 27px; }
   .album-manager-cover button { width: 27px; height: 27px; }
 }
+
+/* Duplicate review — exact repeats are stopped; visual matches are decided side by side. */
+.duplicate-dialog { width: min(760px, calc(100% - 24px)) !important; max-width: 760px !important; padding: 24px !important; border-color: #ded9ee !important; border-radius: 15px !important; background: #fff !important; opacity: 1 !important; }
+.duplicate-dialog .eyebrow { margin: 0 0 7px; color: #6254c8; font-size: 10px; font-weight: 800; letter-spacing: .07em; }
+.duplicate-dialog [data-slot="dialog-title"] { color: #27232d; font-family: "Manrope",sans-serif; font-size: 24px; letter-spacing: -.04em; }
+.duplicate-dialog [data-slot="dialog-description"] { max-width: 540px; color: #716c76; font-size: 12px; line-height: 1.5; }
+.duplicate-comparison { display: grid; grid-template-columns: minmax(0,1fr) 30px minmax(0,1fr); align-items: center; gap: 12px; margin: 4px 0 2px; }
+.duplicate-comparison section { min-width: 0; display: grid; gap: 7px; padding: 10px; border: 1px solid #e9e6ef; border-radius: 11px; background: #fbfaff; }
+.duplicate-comparison section > p { margin: 0; color: #746d93; font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.duplicate-comparison img { width: 100%; aspect-ratio: 1; display: block; border-radius: 7px; object-fit: contain; background: #f0eef1; }
+.duplicate-comparison b { overflow: hidden; color: #37333d; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.duplicate-comparison section > span { color: #89838e; font-size: 10px; }
+.duplicate-compare-divider { width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid #e1dcf2; border-radius: 999px; color: #5c4bd4; background: #f4f2ff; font-size: 15px; }
+.duplicate-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }.duplicate-actions > button { min-height: 37px; padding: 0 13px; font-size: 11px; }
+.duplicate-replace { border: 1px solid #f0c8ca; border-radius: 6px; color: #a43e48; background: #fff5f5; font-weight: 750; }.duplicate-replace:hover { background: #ffeaea; }
+.duplicate-safety-note { margin: -4px 0 0; color: #8b6670; font-size: 10px; line-height: 1.4; }
+@media (max-width: 600px) { .duplicate-dialog { max-height: calc(100vh - 22px); overflow-y: auto; padding: 18px !important; }.duplicate-dialog [data-slot="dialog-title"] { font-size: 21px; }.duplicate-comparison { grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 8px; }.duplicate-compare-divider { display: none; }.duplicate-comparison section { padding: 7px; }.duplicate-actions { display: grid; grid-template-columns: 1fr; }.duplicate-actions > button { width: 100%; justify-content: center; }.duplicate-safety-note { text-align: center; } }

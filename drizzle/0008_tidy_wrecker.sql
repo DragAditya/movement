@@ -1,0 +1,1 @@
+ALTER TABLE `galleryImages` DROP INDEX `galleryImages_content_hash_unique`;

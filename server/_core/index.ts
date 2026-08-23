@@ -10,7 +10,8 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { storageGetSignedUrl, storagePut } from "../storage";
 import { nanoid } from "nanoid";
-import { createGalleryImage, listGalleryImagesMissingPreviews, listGalleryImagesMissingThumbnails, saveGalleryPreview, saveGalleryThumbnail } from "../db";
+import { createGalleryImage, listGalleryDuplicateCandidates, listGalleryImagesMissingFingerprints, listGalleryImagesMissingPreviews, listGalleryImagesMissingThumbnails, replaceGalleryImage, saveGalleryFingerprints, saveGalleryPreview, saveGalleryThumbnail } from "../db";
+import { contentHash, findDuplicateMatch, visualHash } from "../duplicateImage";
 import { runNewJewelleryAnalysis } from "../jewelleryAi";
 import sharp from "sharp";
 
@@ -61,6 +62,21 @@ async function backfillGalleryDerivatives() {
   }
 }
 
+async function backfillGalleryFingerprints() {
+  const missing = await listGalleryImagesMissingFingerprints();
+  for (const image of missing) {
+    try {
+      const signedUrl = await storageGetSignedUrl(image.originalKey);
+      const response = await fetch(signedUrl);
+      if (!response.ok) throw new Error(`Original download failed (${response.status})`);
+      const source = Buffer.from(await response.arrayBuffer());
+      await saveGalleryFingerprints(image.id, { contentHash: contentHash(source), visualHash: await visualHash(source) });
+    } catch (error) {
+      console.warn(`[Duplicate checker] Could not fingerprint ${image.id}`, error);
+    }
+  }
+}
+
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
     const server = net.createServer();
@@ -98,6 +114,16 @@ async function startServer() {
     const width = Number(req.headers["x-image-width"] ?? 0) || undefined;
     const height = Number(req.headers["x-image-height"] ?? 0) || undefined;
     try {
+      const fingerprints = { contentHash: contentHash(req.body), visualHash: await visualHash(req.body) };
+      const duplicate = findDuplicateMatch(fingerprints, await listGalleryDuplicateCandidates());
+      const decision = typeof req.headers["x-duplicate-decision"] === "string" ? req.headers["x-duplicate-decision"] : "";
+      const replacementId = Number(req.headers["x-replace-image-id"] ?? 0);
+      const canUploadVisualMatch = duplicate?.kind === "similar" && decision === "upload-as-new";
+      const canReplaceVisualMatch = duplicate?.kind === "similar" && decision === "replace-existing" && replacementId === duplicate.image.id;
+      if (duplicate && !canUploadVisualMatch && !canReplaceVisualMatch) {
+        res.status(409).json({ error: duplicate.kind === "exact" ? "This exact image is already in your library." : "A visually similar image needs your review before uploading.", duplicate: { kind: duplicate.kind, distance: duplicate.distance, similarity: duplicate.similarity, image: { id: duplicate.image.id, filename: duplicate.image.filename, originalUrl: duplicate.image.originalUrl, thumbnailUrl: duplicate.image.thumbnailUrl, previewUrl: duplicate.image.previewUrl, width: duplicate.image.width, height: duplicate.image.height, createdAt: duplicate.image.createdAt } } });
+        return;
+      }
       const stored = await storagePut(`gallery/originals/${nanoid()}-${filename}`, req.body, contentType);
       let thumbnailUrl: string | undefined;
       let previewUrl: string | undefined;
@@ -112,12 +138,13 @@ async function startServer() {
         console.warn("[Upload] Original stored without a compact preview", previewError);
       }
       try {
-        const image = await createGalleryImage({ originalKey: stored.key, originalUrl: stored.url, thumbnailUrl, previewUrl, filename, mimeType: contentType, fileSize: req.body.length, width, height });
+        const values = { originalKey: stored.key, originalUrl: stored.url, thumbnailUrl, previewUrl, filename, mimeType: contentType, fileSize: req.body.length, width, height, ...fingerprints };
+        const image = canReplaceVisualMatch ? await replaceGalleryImage(replacementId, values) : await createGalleryImage(values);
         const analysis = image ? await runNewJewelleryAnalysis(image.id) : undefined;
-        res.status(201).json({ key: stored.key, url: stored.url, thumbnailUrl, previewUrl, stored: true, persisted: true, imageId: image?.id, aiStatus: analysis?.status });
+        res.status(201).json({ key: stored.key, url: stored.url, thumbnailUrl, previewUrl, stored: true, persisted: true, imageId: image?.id, replaced: canReplaceVisualMatch, aiStatus: analysis?.status });
       } catch (indexError) {
         console.error("[Upload] Image stored but record indexing failed", indexError);
-        res.status(202).json({ key: stored.key, url: stored.url, thumbnailUrl, previewUrl, stored: true, persisted: false, filename, mimeType: contentType, fileSize: req.body.length, width, height });
+        res.status(202).json({ key: stored.key, url: stored.url, thumbnailUrl, previewUrl, stored: true, persisted: false, filename, mimeType: contentType, fileSize: req.body.length, contentHash: fingerprints.contentHash, visualHash: fingerprints.visualHash, width, height });
       }
     } catch (error) {
       console.error("[Upload] Failed before image storage completed", error);
@@ -125,13 +152,13 @@ async function startServer() {
     }
   });
   app.post("/api/upload/reconcile", express.json({ limit: "1mb" }), async (req, res) => {
-    const body = req.body as { key?: string; url?: string; thumbnailUrl?: string; previewUrl?: string; filename?: string; mimeType?: string; fileSize?: number; width?: number; height?: number };
+    const body = req.body as { key?: string; url?: string; thumbnailUrl?: string; previewUrl?: string; filename?: string; mimeType?: string; fileSize?: number; contentHash?: string; visualHash?: string; width?: number; height?: number };
     if (!body.key || !body.url || !body.filename || !body.mimeType || !body.fileSize) {
       res.status(400).json({ error: "Stored image metadata is incomplete." });
       return;
     }
     try {
-      const image = await createGalleryImage({ originalKey: body.key, originalUrl: body.url, thumbnailUrl: body.thumbnailUrl, previewUrl: body.previewUrl, filename: body.filename, mimeType: body.mimeType, fileSize: body.fileSize, width: body.width, height: body.height });
+      const image = await createGalleryImage({ originalKey: body.key, originalUrl: body.url, thumbnailUrl: body.thumbnailUrl, previewUrl: body.previewUrl, filename: body.filename, mimeType: body.mimeType, fileSize: body.fileSize, contentHash: body.contentHash, visualHash: body.visualHash, width: body.width, height: body.height });
       const analysis = image ? await runNewJewelleryAnalysis(image.id) : undefined;
       res.status(201).json({ persisted: true, imageId: image?.id, aiStatus: analysis?.status });
     } catch (error) {
@@ -164,8 +191,9 @@ async function startServer() {
   }
 
   server.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}/`);
+    console.log(`Server running on http://localhost:${port}`);
     void backfillGalleryDerivatives();
+    void backfillGalleryFingerprints();
   });
 }
 

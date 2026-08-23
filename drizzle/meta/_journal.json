@@ -50,6 +50,20 @@
       "when": 1787496081609,
       "tag": "0006_kind_celestials",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1787498088275,
+      "tag": "0007_curly_mister_fear",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1787498316268,
+      "tag": "0008_tidy_wrecker",
+      "breakpoints": true
     }
   ]
 }

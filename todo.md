@@ -136,3 +136,13 @@
 - [x] Capture final visible album-detail preview proof after the semantic wrapper correction.
 - [x] Inspect and document the final 390 px album-detail preview screenshot before publication.
 - [x] Confirm the inspected album-detail screenshot proof is documented before publishing.
+- [x] Add persisted exact-file and visual-similarity fingerprints for uploaded images.
+- [x] Block exact duplicate uploads before storage and show the existing image side by side with the new candidate.
+- [x] Present visually similar uploads in a careful side-by-side review with Keep existing, Upload as new, and Replace existing decisions.
+- [x] Preserve approval-only Gemini organization and test duplicate handling across desktop and mobile Studio upload flows.
+- [x] Preserve existing duplicate records while enabling fingerprints and prevent only future duplicate uploads through the upload guard.
+- [x] Ensure the side-by-side duplicate review uses an opaque, legible modal surface over the Studio upload page.
+- [x] Verify the duplicate-review layout and action accessibility in the mobile Studio viewport.
+- [x] Verify the visual-match Upload as new decision creates one unorganised record with no automatic album move.
+- [x] Verify the visual-match Replace existing decision updates the reviewed record while preserving its membership and approval-only Gemini behavior.
+- [x] Align replacement guidance with its preserved-membership and no-automatic-move behavior.

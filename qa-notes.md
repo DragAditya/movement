@@ -269,3 +269,13 @@ Final proof: the 390 px album-detail capture visibly shows all three Bangles pre
 Release confirmation: the inspected file `webdev-preview-albums_bangles_mt5lt4tk-1787496765013450769-7183.png` is a 390 × 844 mobile capture. It visibly renders three distinct gold bangle previews beneath the Bangles controls; no tile is blank, and no caption or overlay covers the images.
 
 The final 390 × 844 capture was directly inspected: the Bangles page displays all three gold bangle preview tiles below its presentation controls, with no blank tile, caption collision, or overflow. This completes the mobile visual proof for the progressive compact-preview treatment.
+
+## Duplicate Checker Verification
+
+The gallery now stores a SHA-256 exact-file fingerprint and a compact 64-bit visual fingerprint for every image. The bounded backfill completed for all 23 retained gallery records. Existing historic duplicates were intentionally retained; duplicate prevention is enforced before future upload storage rather than by a uniqueness constraint that would delete or invalidate prior records.
+
+A byte-identical re-upload was blocked before storage and opened an exact-match review with both the candidate and existing image side by side. A brightness-adjusted candidate produced a 97% visual-match review with **Keep existing**, **Upload as new**, and **Replace existing** decisions. Selecting Keep left the gallery count unchanged. The 390 × 844 direct review capture confirms two image panels stay visible side by side, while all three decisions stack as full-width touch targets beneath them.
+
+The explicit **Upload as new** path was verified using isolated synthetic QA media. It created one new unorganised record, ran its normal editable Gemini suggestion, and created no album membership. The explicit **Replace existing** path then replaced that isolated original in place: record `690001` retained temporary album `540001`, while its content changed to `duplicate-qa-similar-two.jpg`. Because it remained assigned, automatic analysis did not move it or create a new album. The review copy was corrected to state that replacement preserves placement and leaves any subsequent Gemini suggestion for approval.
+
+The temporary QA images and temporary album were removed through the supported gallery procedures. Final cleanup confirms zero `duplicate-qa-*` images, zero temporary albums, 23 retained gallery images, and fingerprints ready for all 23 records.

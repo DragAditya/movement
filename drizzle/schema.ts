@@ -34,6 +34,8 @@ export const galleryImages = mysqlTable("galleryImages", {
   filename: varchar("filename", { length: 255 }).notNull(),
   mimeType: varchar("mimeType", { length: 100 }).notNull(),
   fileSize: int("fileSize").notNull(),
+  contentHash: varchar("contentHash", { length: 64 }),
+  visualHash: varchar("visualHash", { length: 16 }),
   width: int("width"),
   height: int("height"),
   caption: text("caption"),

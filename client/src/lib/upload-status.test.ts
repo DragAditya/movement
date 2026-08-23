@@ -31,5 +31,7 @@ describe("upload result reconciliation", () => {
     expect(canRetryUploadQueueItem("failed")).toBe(true);
     expect(canRetryUploadQueueItem("cancelled")).toBe(true);
     expect(canRetryUploadQueueItem("checking")).toBe(false);
+    expect(canRetryUploadQueueItem("duplicate")).toBe(false);
+    expect(canRemoveUploadQueueItem("duplicate")).toBe(false);
   });
 });

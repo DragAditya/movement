@@ -98,6 +98,8 @@ export type GalleryImageInput = {
   filename: string;
   mimeType: string;
   fileSize: number;
+  contentHash?: string;
+  visualHash?: string;
   width?: number;
   height?: number;
 };
@@ -119,6 +121,35 @@ export async function createGalleryImage(input: GalleryImageInput) {
   await db.insert(galleryImages).values({ ...input, smartGroup: classifyImage(input) });
   const [image] = await db.select().from(galleryImages).where(eq(galleryImages.originalKey, input.originalKey)).limit(1);
   return image;
+}
+
+export async function listGalleryDuplicateCandidates() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({ id: galleryImages.id, filename: galleryImages.filename, originalUrl: galleryImages.originalUrl, thumbnailUrl: galleryImages.thumbnailUrl, previewUrl: galleryImages.previewUrl, width: galleryImages.width, height: galleryImages.height, createdAt: galleryImages.createdAt, contentHash: galleryImages.contentHash, visualHash: galleryImages.visualHash }).from(galleryImages);
+}
+
+export async function listGalleryImagesMissingFingerprints(limit = 32) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({ id: galleryImages.id, originalKey: galleryImages.originalKey, filename: galleryImages.filename })
+    .from(galleryImages)
+    .where(isNull(galleryImages.contentHash))
+    .orderBy(desc(galleryImages.createdAt))
+    .limit(limit);
+}
+
+export async function saveGalleryFingerprints(imageId: number, fingerprints: { contentHash: string; visualHash: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.update(galleryImages).set(fingerprints).where(eq(galleryImages.id, imageId));
+}
+
+export async function replaceGalleryImage(imageId: number, input: GalleryImageInput) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.update(galleryImages).set({ ...input, smartGroup: classifyImage(input), caption: null, aiStatus: "off", aiName: null, aiDescription: null, aiSuggestedAlbumId: null, aiSuggestedNewAlbum: null, aiModel: null, aiError: null, aiAnalyzedAt: null }).where(eq(galleryImages.id, imageId));
+  return getGalleryImage(imageId);
 }
 
 export async function listGalleryImagesMissingThumbnails(limit = 32) {
