@@ -69,3 +69,11 @@ The live player advanced from `01 / 09` to `02 / 09` after its autoplay interval
 The live Play/Pause control was exercised directly: after pausing, the counter remained at `07 / 09` for a full autoplay interval and the control label changed to **Play**. Resuming restored the **Pause** label, confirming the expected playback handoff.
 
 The live orientation selector changed the player through `orientation-portrait`, `orientation-landscape`, and back to `orientation-system` classes. Native fullscreen was unavailable in this browser verification, so the player retained its clean full-viewport fallback without attempting a disruptive device rotation.
+
+After the route data loaded, the adaptive Immersive player displayed the complete uploaded image inside the wide viewport with no unintended crop. The initial screenshot’s loading state was transient; the loaded browser presentation confirmed the intended fitted image stage.
+
+Live gesture verification confirmed an upward swipe moved the counter from `05 / 09` to `06 / 09` while top-bar opacity remained `0`. A downward swipe invoked the shared slideshow exit action. Long holds are deliberately ignored by the gesture policy, preserving a safe hold/select interaction without unwanted navigation.
+
+The mobile adaptive-fit capture confirms the full image is contained without crop on the portrait viewport. Together with the loaded wide-screen capture, this validates that the same uploaded image is framed correctly in both horizontal and vertical presentation contexts.
+
+Adaptive fit is now aspect-ratio-aware rather than an alias for contain. It fills only when the source and viewport share the same shape; portrait-on-landscape and landscape-on-portrait combinations deliberately use safe contain framing to preserve the complete image. Focused test coverage includes matched portrait and landscape frames plus both cross-orientation cases. The final suite contains **29 passing tests**, with type checking and production build passing.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fullscreenPresentationState, orientationLockTarget, playbackDefaults, shouldRevealControls } from "./immersive-policy";
+import { adaptiveObjectFit, fullscreenPresentationState, orientationLockTarget, playbackDefaults, resolveImmersiveGesture, shouldRevealControls } from "./immersive-policy";
 
 describe("immersive playback policy", () => {
   it("autoplays immersive and kiosk while starting their chrome hidden", () => {
@@ -24,5 +24,20 @@ describe("immersive playback policy", () => {
   it("keeps the clean viewport player when a native fullscreen request is blocked", () => {
     expect(fullscreenPresentationState(true)).toBe("native-fullscreen");
     expect(fullscreenPresentationState(false)).toBe("viewport-fallback");
+  });
+
+  it("uses upward swipe for the next slide, downward swipe for immersive exit, and ignores holds", () => {
+    const base = { mode: "immersive" as const, verticalNavigation: true, swipeDownExit: true, threshold: 72 };
+    expect(resolveImmersiveGesture({ ...base, deltaX: 0, deltaY: -96, elapsedMs: 180 })).toBe("next");
+    expect(resolveImmersiveGesture({ ...base, deltaX: 0, deltaY: 96, elapsedMs: 180 })).toBe("exit");
+    expect(resolveImmersiveGesture({ ...base, deltaX: 0, deltaY: -96, elapsedMs: 720 })).toBe("none");
+  });
+
+  it("uses cover only for matching image and viewport shapes while preserving mismatched portrait and landscape images", () => {
+    expect(adaptiveObjectFit(390 / 844, 390 / 844)).toBe("cover");
+    expect(adaptiveObjectFit(16 / 9, 1280 / 720)).toBe("cover");
+    expect(adaptiveObjectFit(9 / 16, 390 / 844)).toBe("contain");
+    expect(adaptiveObjectFit(9 / 16, 1280 / 720)).toBe("contain");
+    expect(adaptiveObjectFit(16 / 9, 390 / 844)).toBe("contain");
   });
 });

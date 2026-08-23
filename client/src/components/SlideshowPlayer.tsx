@@ -1,6 +1,6 @@
 import type { GalleryImage } from "@/data/gallery";
 import { nextSlideIndex } from "@/lib/gallery-utils";
-import { orientationLockTarget, playbackDefaults, shouldRevealControls, type OrientationMode } from "@/lib/immersive-policy";
+import { adaptiveObjectFit, orientationLockTarget, playbackDefaults, resolveImmersiveGesture, shouldRevealControls, type OrientationMode } from "@/lib/immersive-policy";
 import {
   ChevronLeft,
   ChevronRight,
@@ -14,7 +14,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type Transition = "crossfade" | "fade" | "slide" | "instant";
-type FitMode = "contain" | "cover";
+type FitMode = "adaptive" | "contain" | "cover";
 
 type SlideshowPlayerProps = {
   images: GalleryImage[];
@@ -33,18 +33,26 @@ export default function SlideshowPlayer({
 }: SlideshowPlayerProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pointerStart = useRef<{ x: number; y: number } | null>(null);
+  const pointerStart = useRef<{ x: number; y: number; time: number } | null>(null);
   const [index, setIndex] = useState(Math.min(initialIndex, Math.max(images.length - 1, 0)));
   const [playing, setPlaying] = useState(playbackDefaults(mode).autoplay);
   const [controlsVisible, setControlsVisible] = useState(playbackDefaults(mode).controlsVisible);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [interval, setIntervalSeconds] = useState(5);
   const [transition, setTransition] = useState<Transition>("crossfade");
-  const [fit, setFit] = useState<FitMode>("contain");
+  const [fit, setFit] = useState<FitMode>("adaptive");
   const [showCounter, setShowCounter] = useState(true);
   const [showCaptions, setShowCaptions] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [orientation, setOrientation] = useState<OrientationMode>("system");
+  const [verticalNavigation, setVerticalNavigation] = useState(true);
+  const [swipeDownExit, setSwipeDownExit] = useState(true);
+  const [gestureSensitivity, setGestureSensitivity] = useState<"gentle" | "balanced" | "deliberate">("balanced");
+  const [imageAspectRatio, setImageAspectRatio] = useState<number | null>(null);
+  const [viewportAspectRatio, setViewportAspectRatio] = useState(1);
+
+  const gestureThreshold = gestureSensitivity === "gentle" ? 48 : gestureSensitivity === "deliberate" ? 104 : 72;
+  const resolvedFit = fit === "adaptive" ? adaptiveObjectFit(imageAspectRatio, viewportAspectRatio) : fit;
 
   const showControls = useCallback(() => {
     if (!shouldRevealControls(mode, "intent") && !settingsOpen) return;
@@ -76,6 +84,13 @@ export default function SlideshowPlayer({
     }
   }, []);
 
+  const exitImmersive = useCallback(async () => {
+    if (document.fullscreenElement) {
+      try { await document.exitFullscreen(); } catch { /* Continue to the supplied exit route. */ }
+    }
+    onExit();
+  }, [onExit]);
+
   const enterImmersiveFullscreen = useCallback(async () => {
     if (mode === "standard" || document.fullscreenElement) return;
     try { await rootRef.current?.requestFullscreen(); } catch { /* Fixed viewport remains the intentional fallback. */ }
@@ -99,6 +114,13 @@ export default function SlideshowPlayer({
   }, [isFullscreen, orientation]);
 
   useEffect(() => {
+    const updateViewportRatio = () => setViewportAspectRatio(window.innerWidth / window.innerHeight);
+    updateViewportRatio();
+    window.addEventListener("resize", updateViewportRatio);
+    return () => window.removeEventListener("resize", updateViewportRatio);
+  }, []);
+
+  useEffect(() => {
     if (!playing || images.length < 2) return;
     const timer = window.setInterval(() => move(1), interval * 1000);
     return () => window.clearInterval(timer);
@@ -113,13 +135,12 @@ export default function SlideshowPlayer({
         setPlaying(current => !current);
       }
       if (event.key === "Escape") {
-        if (document.fullscreenElement) document.exitFullscreen();
-        else onExit();
+        void exitImmersive();
       }
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [move, onExit]);
+  }, [exitImmersive, move]);
 
   useEffect(() => {
     if (mode === "standard") showControls();
@@ -132,12 +153,15 @@ export default function SlideshowPlayer({
 
   const handlePointerUp = (event: React.PointerEvent) => {
     if (!pointerStart.current) return;
-    const deltaX = event.clientX - pointerStart.current.x;
-    const deltaY = event.clientY - pointerStart.current.y;
+    const { x, y, time } = pointerStart.current;
+    const deltaX = event.clientX - x;
+    const deltaY = event.clientY - y;
     pointerStart.current = null;
-    if (Math.abs(deltaX) > 56 && Math.abs(deltaX) > Math.abs(deltaY) * 1.25) {
-      move(deltaX < 0 ? 1 : -1, true);
-    } else if (Math.abs(deltaX) < 12 && Math.abs(deltaY) < 12) {
+    const gesture = resolveImmersiveGesture({ deltaX, deltaY, elapsedMs: Date.now() - time, mode, verticalNavigation, swipeDownExit, threshold: gestureThreshold });
+    if (gesture === "previous") move(-1, true);
+    if (gesture === "next") move(1, false);
+    if (gesture === "exit") void exitImmersive();
+    if (gesture === "reveal") {
       void enterImmersiveFullscreen();
       showControls();
     }
@@ -153,21 +177,22 @@ export default function SlideshowPlayer({
       ref={rootRef}
       onMouseMove={showControls}
       onPointerDown={event => {
-        pointerStart.current = { x: event.clientX, y: event.clientY };
+        pointerStart.current = { x: event.clientX, y: event.clientY, time: Date.now() };
       }}
       onPointerUp={handlePointerUp}
+      onPointerCancel={() => { pointerStart.current = null; }}
       role="dialog"
       aria-modal="true"
       aria-label="Fullscreen slideshow"
     >
       <div className={`slideshow-image-stage transition-${transition}`}>
-        <img key={image.id} className={`slideshow-image fit-${fit}`} src={image.src} alt={image.alt} draggable={false} />
+        <img key={image.id} className={`slideshow-image fit-${resolvedFit} ${fit === "adaptive" ? "fit-adaptive" : ""}`} src={image.src} alt={image.alt} draggable={false} onLoad={event => setImageAspectRatio(event.currentTarget.naturalWidth / event.currentTarget.naturalHeight)} />
       </div>
 
       <div className={`slideshow-shade ${controlsVisible || settingsOpen ? "is-visible" : ""}`} />
 
       <div className={`${controlClass} slideshow-topbar`}>
-        <button className="slideshow-icon-button" onClick={onExit} aria-label="Exit slideshow">
+        <button className="slideshow-icon-button" onClick={() => void exitImmersive()} aria-label="Exit slideshow">
           <X size={20} strokeWidth={1.7} />
         </button>
         <div className="slideshow-identity">GALLERY</div>
@@ -225,7 +250,8 @@ export default function SlideshowPlayer({
           </label>
           <label className="settings-label">Image fitting
             <select value={fit} onChange={event => setFit(event.target.value as FitMode)}>
-              <option value="contain">Fit image</option>
+              <option value="adaptive">Adaptive fit (recommended)</option>
+              <option value="contain">Fit entire image</option>
               <option value="cover">Fill screen</option>
             </select>
           </label>
@@ -236,9 +262,18 @@ export default function SlideshowPlayer({
               <option value="landscape">Landscape</option>
             </select>
           </label>
+          <label className="setting-check"><input type="checkbox" checked={verticalNavigation} onChange={event => setVerticalNavigation(event.target.checked)} /> Swipe up for next image</label>
+          <label className="setting-check"><input type="checkbox" checked={swipeDownExit} onChange={event => setSwipeDownExit(event.target.checked)} /> Swipe down to exit</label>
+          <label className="settings-label">Gesture sensitivity
+            <select value={gestureSensitivity} onChange={event => setGestureSensitivity(event.target.value as "gentle" | "balanced" | "deliberate")}>
+              <option value="gentle">Gentle</option>
+              <option value="balanced">Balanced</option>
+              <option value="deliberate">Deliberate</option>
+            </select>
+          </label>
           <label className="setting-check"><input type="checkbox" checked={showCounter} onChange={event => setShowCounter(event.target.checked)} /> Show counter</label>
           <label className="setting-check"><input type="checkbox" checked={showCaptions} onChange={event => setShowCaptions(event.target.checked)} /> Show captions</label>
-          <p className="settings-help">Use arrow keys to navigate, Space to play or pause, and Escape to exit.</p>
+          <p className="settings-help">Swipe up for the next image, swipe down to exit, use arrow keys to navigate, Space to play or pause, and Escape to exit.</p>
         </aside>
       )}
     </div>

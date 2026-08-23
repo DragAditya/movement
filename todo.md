@@ -51,3 +51,8 @@
 - [x] Eliminate Kiosk-layout flashes and stabilize image transitions between Immersive slideshow changes.
 - [x] Test Immersive playback, pause control, orientation fallback, fullscreen fallback, and responsive presentation behavior.
 - [x] Add focused Immersive playback-policy tests for hidden controls, user reveal, automatic slide changes, orientation modes, and fullscreen fallback.
+- [x] Add smooth vertical swipe navigation and swipe-down exit for Immersive playback without interfering with hold/select gestures.
+- [x] Add gesture customization settings for vertical navigation and swipe-down exit behavior.
+- [x] Correct adaptive image fitting so portrait and landscape displays frame the same image without unintended cropping or empty bars.
+- [x] Test gesture actions, exit flow, orientation fitting, and responsive immersive presentation.
+- [x] Implement aspect-ratio-aware adaptive fit selection and verify portrait-on-landscape and landscape-on-portrait framing.
