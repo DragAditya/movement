@@ -36,8 +36,24 @@ export const galleryImages = mysqlTable("galleryImages", {
   width: int("width"),
   height: int("height"),
   caption: text("caption"),
+  aiStatus: mysqlEnum("aiStatus", ["off", "queued", "analyzing", "ready", "approved", "dismissed", "failed"]).default("off").notNull(),
+  aiName: varchar("aiName", { length: 120 }),
+  aiDescription: varchar("aiDescription", { length: 160 }),
+  aiSuggestedAlbumId: int("aiSuggestedAlbumId"),
+  aiSuggestedNewAlbum: varchar("aiSuggestedNewAlbum", { length: 80 }),
+  aiModel: varchar("aiModel", { length: 80 }),
+  aiError: varchar("aiError", { length: 255 }),
+  aiAnalyzedAt: timestamp("aiAnalyzedAt"),
   smartGroup: mysqlEnum("smartGroup", ["personal", "screens", "projects"]).default("personal").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const aiSettings = mysqlTable("aiSettings", {
+  id: int("id").autoincrement().primaryKey(),
+  enabled: boolean("enabled").default(false).notNull(),
+  autoAnalyzeNew: boolean("autoAnalyzeNew").default(true).notNull(),
+  model: mysqlEnum("model", ["gemini-3-flash-preview", "gemini-3.1-pro-preview"]).default("gemini-3-flash-preview").notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
 export const albums = mysqlTable("albums", {
@@ -93,3 +109,4 @@ export const activityEvents = mysqlTable("activityEvents", {
 export type GalleryImage = typeof galleryImages.$inferSelect;
 export type Album = typeof albums.$inferSelect;
 export type AlbumImage = typeof albumImages.$inferSelect;
+export type AiSettings = typeof aiSettings.$inferSelect;

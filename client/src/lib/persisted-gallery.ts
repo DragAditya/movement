@@ -15,6 +15,12 @@ export type PersistedGalleryImage = {
   width: number;
   height: number;
   createdAt: string;
+  aiStatus: "off" | "queued" | "analyzing" | "ready" | "approved" | "dismissed" | "failed";
+  aiName: string | null;
+  aiDescription: string | null;
+  aiSuggestedAlbumId: number | null;
+  aiSuggestedNewAlbum: string | null;
+  aiError: string | null;
 };
 
 export type PersistedAlbum = {
@@ -38,19 +44,39 @@ export type SmartAlbum = {
   imageCount: number;
 };
 
-function toImage(image: { id: number; originalUrl: string; filename: string; caption: string | null; smartGroup: SmartGroup; width: number | null; height: number | null; createdAt: Date }): PersistedGalleryImage {
+type GalleryImageCopyInput = Pick<PersistedGalleryImage, "aiStatus" | "aiName" | "aiDescription"> & {
+  filename: string;
+  caption: string | null;
+};
+
+export function resolveVisibleImageCopy(image: GalleryImageCopyInput) {
+  const hasReadyAiName = (image.aiStatus === "ready" || image.aiStatus === "approved") && Boolean(image.aiName);
+  return {
+    title: hasReadyAiName ? image.aiName! : image.filename.replace(/\.[^/.]+$/, ""),
+    caption: hasReadyAiName && image.aiDescription ? image.aiDescription : image.caption ?? "Uploaded gallery image.",
+  };
+}
+
+function toImage(image: { id: number; originalUrl: string; filename: string; caption: string | null; smartGroup: SmartGroup; width: number | null; height: number | null; createdAt: Date; aiStatus: PersistedGalleryImage["aiStatus"]; aiName: string | null; aiDescription: string | null; aiSuggestedAlbumId: number | null; aiSuggestedNewAlbum: string | null; aiError: string | null }): PersistedGalleryImage {
+  const copy = resolveVisibleImageCopy(image);
   return {
     id: `image-${image.id}`,
     recordId: image.id,
     src: image.originalUrl,
     alt: image.filename,
-    title: image.filename.replace(/\.[^/.]+$/, ""),
-    caption: image.caption ?? "Uploaded gallery image.",
+    title: copy.title,
+    caption: copy.caption,
     collection: image.smartGroup,
     smartGroup: image.smartGroup,
     width: image.width ?? 0,
     height: image.height ?? 0,
     createdAt: new Date(image.createdAt).toISOString(),
+    aiStatus: image.aiStatus,
+    aiName: image.aiName,
+    aiDescription: image.aiDescription,
+    aiSuggestedAlbumId: image.aiSuggestedAlbumId,
+    aiSuggestedNewAlbum: image.aiSuggestedNewAlbum,
+    aiError: image.aiError,
   };
 }
 
@@ -91,5 +117,5 @@ export function usePersistedGallery() {
   const systemAlbum = albums.find(album => album.kind === "system") ?? null;
   const customAlbums = albums.filter(album => album.kind === "custom");
 
-  return { ...query, isLoading: query.isLoading || previewLoading, images, albums, customAlbums, systemAlbum, unassignedImages, smartAlbums, albumImages, smartImages };
+  return { ...query, isLoading: query.isLoading || previewLoading, images, albums, customAlbums, systemAlbum, unassignedImages, smartAlbums, albumImages, smartImages, aiSettings: dashboard?.aiSettings ?? { enabled: false, autoAnalyzeNew: true, model: "gemini-3-flash-preview" as const } };
 }

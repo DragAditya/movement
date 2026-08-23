@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { albumImages, albums, galleryImages, InsertUser, users } from "../drizzle/schema";
+import { aiSettings, albumImages, albums, galleryImages, InsertUser, users } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { isMutableAlbum } from "./albumRules";
 
@@ -119,6 +119,76 @@ export async function createGalleryImage(input: GalleryImageInput) {
   return image;
 }
 
+export type AiModel = "gemini-3-flash-preview" | "gemini-3.1-pro-preview";
+
+export async function getAiSettings() {
+  const db = await getDb();
+  if (!db) return { id: 0, enabled: false, autoAnalyzeNew: true, model: "gemini-3-flash-preview" as AiModel };
+  const [existing] = await db.select().from(aiSettings).limit(1);
+  if (existing) return existing;
+  await db.insert(aiSettings).values({ enabled: false, autoAnalyzeNew: true, model: "gemini-3-flash-preview" });
+  const [created] = await db.select().from(aiSettings).limit(1);
+  return created!;
+}
+
+export async function updateAiSettings(input: Partial<{ enabled: boolean; autoAnalyzeNew: boolean; model: AiModel }>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const settings = await getAiSettings();
+  await db.update(aiSettings).set(input).where(eq(aiSettings.id, settings.id));
+  return getAiSettings();
+}
+
+export async function getGalleryImage(imageId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const [image] = await db.select().from(galleryImages).where(eq(galleryImages.id, imageId)).limit(1);
+  if (!image) throw new Error("Image not found");
+  return image;
+}
+
+export async function markImageAiStatus(imageId: number, status: "queued" | "analyzing" | "failed", error?: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.update(galleryImages).set({ aiStatus: status, aiError: error ?? null }).where(eq(galleryImages.id, imageId));
+}
+
+export async function saveJewellerySuggestion(input: { imageId: number; name: string; description: string; suggestedAlbumId: number | null; suggestedNewAlbum: string | null; model: AiModel }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.update(galleryImages).set({ aiStatus: "ready", aiName: input.name, aiDescription: input.description, aiSuggestedAlbumId: input.suggestedAlbumId, aiSuggestedNewAlbum: input.suggestedNewAlbum, aiModel: input.model, aiError: null, aiAnalyzedAt: new Date() }).where(eq(galleryImages.id, input.imageId));
+  return getGalleryImage(input.imageId);
+}
+
+export async function approveJewellerySuggestion(input: { imageId: number; name?: string; description?: string; assignAlbum: boolean }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const image = await getGalleryImage(input.imageId);
+  const name = input.name?.trim().slice(0, 120) || image.aiName || image.filename.replace(/\.[^/.]+$/, "");
+  const description = input.description?.trim().slice(0, 160) || image.aiDescription || image.caption || "";
+  let targetAlbumId: number | null = null;
+  if (input.assignAlbum) {
+    targetAlbumId = image.aiSuggestedAlbumId;
+    if (!targetAlbumId && image.aiSuggestedNewAlbum) {
+      const slug = `${image.aiSuggestedNewAlbum.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}-${Date.now().toString(36)}`;
+      const created = await createAlbum({ slug, name: image.aiSuggestedNewAlbum, description: "", visibility: "public", presentationMode: "immersive", accent: "stone", sortOrder: 0 });
+      targetAlbumId = created.id;
+    }
+  }
+  await db.update(galleryImages).set({ caption: description, aiName: name, aiDescription: description, aiStatus: "approved", aiError: null }).where(eq(galleryImages.id, input.imageId));
+  if (targetAlbumId) {
+    const existingMembers = await db.select({ imageId: albumImages.imageId }).from(albumImages).where(eq(albumImages.albumId, targetAlbumId));
+    await setAlbumImages(targetAlbumId, [...existingMembers.map(member => member.imageId), image.id]);
+  }
+  return { image: await getGalleryImage(input.imageId), albumId: targetAlbumId };
+}
+
+export async function dismissJewellerySuggestion(imageId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.update(galleryImages).set({ aiStatus: "dismissed", aiError: null }).where(eq(galleryImages.id, imageId));
+}
+
 export async function createAlbum(input: { slug: string; name: string; description?: string; coverImageId?: number; visibility: "public" | "private"; presentationMode: "standard" | "immersive" | "kiosk"; accent: string; sortOrder: number }) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
@@ -187,12 +257,12 @@ async function ensureAllImagesAlbum(db: NonNullable<Awaited<ReturnType<typeof ge
 
 export async function getAlbumDashboard() {
   const db = await getDb();
-  if (!db) return { albums: [], images: [], memberships: [] };
+  if (!db) return { albums: [], images: [], memberships: [], aiSettings: { enabled: false, autoAnalyzeNew: true, model: "gemini-3-flash-preview" as AiModel } };
   await ensureAllImagesAlbum(db);
   const [albumRows, imageRows, membershipRows] = await Promise.all([
     db.select().from(albums).orderBy(albums.sortOrder, albums.createdAt),
     db.select().from(galleryImages).orderBy(desc(galleryImages.createdAt)),
     db.select().from(albumImages).orderBy(albumImages.sortOrder),
   ]);
-  return { albums: albumRows, images: imageRows, memberships: membershipRows };
+  return { albums: albumRows, images: imageRows, memberships: membershipRows, aiSettings: await getAiSettings() };
 }

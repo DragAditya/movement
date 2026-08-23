@@ -144,6 +144,54 @@ At the actual **390 × 844** mobile capture of `/manage?tab=albums&edit=first`, 
 
 This mobile result was additionally verified through Chrome device emulation at an actual 390 × 844 viewport. The inspected editor was open with the Movement mark and exactly `INPUT`, `TEXTAREA`, and `SELECT` controls. The stacked cover field measured 336px wide with a 308px preview within its padded surface; selecting Berserk changed the preview source immediately and the layout check returned `stacked: true`.
 
+## Gemini Jewellery Assistant
+
+Movement now has an optional **AI Assistance** panel inside Studio Presentation settings. The live default is disabled, and its Gemini selector is disabled until the user turns assistance on. Browser inspection confirmed the two verified user-facing choices: **Gemini Flash — Default** (`gemini-3-flash-preview`) and **Gemini 3.1 Pro — Higher quality** (`gemini-3.1-pro-preview`).
+
+For end-to-end validation of the requested automatic-new-upload behavior, AI Assistance was enabled through the Studio setting. The default Gemini Flash option became available and will remain enabled for future new jewellery uploads unless it is turned off in Studio.
+
+A temporary gold floral ring image was uploaded through the live Library endpoint after AI Assistance was enabled. The upload was persisted successfully as image record `120001`, which triggered the server-side new-upload analysis lifecycle without relying on an open browser upload queue.
+
+The live Gemini response budget was verified with the temporary ring image: Gemini returned `Gold Floral Textured Ring`, `A gold ring featuring a flower.`, and category `rings`. The upload-analysis procedure then completed with `status: ready`, proving the compact structured result reaches the persisted approval workflow.
+
+The ready suggestion appeared in the live Library approval card with exactly one new-album recommendation, **Create Rings**. The Edit action opened only the compact name and description fields, where the generated values were corrected to `Gold Floral Ring` and `Gold floral ring.` before approval.
+
+Selecting **Approve** removed the card and the image from the unassigned Library, then created `Rings` only after that explicit action. The persisted record has `aiStatus: approved`, `aiName: Gold Floral Ring`, `caption: Gold floral ring.`, and exactly one custom-album membership in `Rings`.
+
+After approval, the live Library showed **Unassigned 0**, confirming that the test image left the unassigned workspace while All Images continued to retain it.
+
+A second temporary upload then automatically reached a ready card with the already-created **Rings** album as its single existing-album recommendation, rather than proposing another album. This confirms the matching rule chooses one existing jewellery album when available.
+
+Selecting **Keep unassigned** removed the card while retaining the temporary image in the unassigned Library. Its visible title changed to **Gold Textured Flower Ring**; the persisted row is `approved` with the AI name and description, but has zero custom-album memberships.
+
+A final temporary new-upload record was created through the same live upload endpoint solely to inspect the ready approval card at the 390px mobile breakpoint; it will be removed with all other QA records during cleanup.
+
+The actual **390 × 844** mobile capture retained the small image preview, short name and description, one **Rings** recommendation, and clear **Approve**, **Edit**, and **Keep unassigned** actions without horizontal overflow or a crowded dashboard treatment.
+
+The three temporary ring images and the temporary `Rings` album were then removed through the supported image- and album-deletion procedures. No user album or uploaded record was selected for this cleanup.
+
+The final data check found zero temporary image records, zero temporary albums, and the original 10 gallery images. The live Library returned to **Unassigned 0**. AI Assistance was restored to its pre-test disabled state, with automatic-new-upload behavior retained for the next time the user enables it.
+
+For the final membership-preservation check, a separate temporary `AI QA Rings` album was created and populated with one temporary manually assigned ring image before AI Assistance was re-enabled. A second temporary ring upload then entered the new-upload analysis flow for approval into that already-populated target.
+
+The ready card proposed **AI QA Rings** as its sole existing-album choice. After explicit approval, the card cleared and the Library returned to **Unassigned 0**. Database verification found both the original member `180001` and the newly approved image `180002` in that album, with two total members and exactly one membership for the new image; the existing member was preserved.
+
+The two final temporary images and the `AI QA Rings` album were removed through the supported procedures, and AI Assistance was again restored to disabled. This completed the live verification without retaining QA uploads, albums, or a changed user setting.
+
+After aligning the visible-copy rule with automatic naming, one final temporary new upload was created with AI Assistance briefly enabled. This record is used solely to verify that the ready result changes the displayed name and description before any album action, then will be deleted and the setting restored.
+
+The live ready card remained pending approval with only **Create Rings** as its album suggestion, while the unassigned Library tile had already changed from its filename to **Gold Textured Flower Ring**. This confirms that short AI name and description display automatically for new uploads, whereas album creation and membership remain approval-only.
+
+The final temporary automatic-copy record was deleted and AI Assistance returned to disabled. A final data check confirms zero remaining QA records from this pass and the original 10 gallery images remain.
+
+After adding the visible pre-approval description treatment to the Library tile, one final temporary upload was created with AI Assistance briefly enabled. It will be inspected in the ready state, then removed and the setting restored.
+
+The ready, still-unassigned Library tile visibly showed **Textured Gold Flower Ring** and **Gold ring with flower.** before any action was chosen. Its card still showed only the optional **Create Rings** suggestion, confirming both automatic copy and approval-only album changes in the same live state.
+
+That final QA image was deleted and AI Assistance returned to disabled. The release data check found zero temporary records from this final pass and the original 10 gallery images intact.
+
+When enabled, only newly persisted uploads trigger the server-side jewellery workflow. Gemini receives the image through a short-lived storage URL and returns strict structured output: one short English name, one very short description, and one jewellery category. The backend reuses a matching existing custom album when available; otherwise it proposes only one simple new album. The user must explicitly Approve, Edit, or Keep unassigned before an image is renamed or assigned. Existing album members are preserved during approval.
+
 ## Loading, Upload Queue, and Albums Refinement
 
 Reusable animated skeletons now preserve the layout of the public home page, Albums directory, album detail, Admin Library, Admin Albums workspace, and slideshow entry while their gallery query is unresolved. Rendering coverage verifies every loading surface has an accessible status label and the intended card or media placeholder structure.

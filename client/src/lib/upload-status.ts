@@ -8,6 +8,7 @@ export type UploadResponsePayload = {
   fileSize?: number;
   width?: number;
   height?: number;
+  imageId?: number;
   error?: string;
 };
 

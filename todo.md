@@ -89,3 +89,16 @@
 - [x] Verify the simplified branded editor and live cover preview inside a mobile viewport.
 - [x] Capture inspectable 390px editor evidence for the Movement header, stacked controls, and changing cover preview.
 - [x] Record the actual 390px editor screenshot evidence and mobile cover-preview behavior explicitly for release QA.
+- [x] Add optional AI Assistance settings with Gemini Flash-Lite default and higher-quality model selection.
+- [x] Analyze enabled uploads into a short English jewellery name, one-sentence description, and one album recommendation.
+- [x] Suggest one matching existing jewellery album or one simple new album only, without auto-changing image ownership.
+- [x] Build a compact user approval card for accepting, editing, or keeping an upload unassigned.
+- [x] Test optional automatic analysis, simple jewellery outputs, album approval, and mobile review flow.
+- [x] Align the AI Settings labels with the live available Gemini model IDs and document the default and higher-quality choices.
+- [x] Run an end-to-end new jewellery upload analysis and verify short output plus one album suggestion.
+- [x] Verify approve, edit, and keep-unassigned actions, including mobile approval-card behavior and preserved album membership.
+- [x] Create a polished mobile mockup for the simple Movement jewellery AI approval card.
+- [x] Add parser-resilience tests for valid JSON, Markdown-fenced JSON, and truncated Gemini responses.
+- [x] Approve a temporary AI suggestion into an existing, populated jewellery album and verify that its original member remains alongside the new image.
+- [x] Show the ready AI name and description immediately while keeping all album changes approval-only.
+- [x] Surface the ready AI description on the unassigned Library tile before album approval and verify it live.

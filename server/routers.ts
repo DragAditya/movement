@@ -4,10 +4,12 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import * as db from "./db";
+import { runNewJewelleryAnalysis } from "./jewelleryAi";
 
 const presentationMode = z.enum(["standard", "immersive", "kiosk"]);
 const visibility = z.enum(["public", "private"]);
 const slideshowMode = z.enum(["fade", "crossfade", "slide", "instant"]);
+const aiModel = z.enum(["gemini-3-flash-preview", "gemini-3.1-pro-preview"]);
 
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -39,6 +41,11 @@ export const appRouter = router({
     deleteImages: publicProcedure.input(z.object({ imageIds: z.array(z.number().int().positive()).min(1) })).mutation(async ({ input }) => { await db.permanentlyDeleteImages(input.imageIds); return { success: true, deletedCount: input.imageIds.length }; }),
     setAlbumImages: publicProcedure.input(z.object({ albumId: z.number().int().positive(), imageIds: z.array(z.number().int().positive()) })).mutation(async ({ input }) => { await db.setAlbumImages(input.albumId, input.imageIds); return { success: true }; }),
     reorderAlbums: publicProcedure.input(z.object({ albumIds: z.array(z.number().int().positive()).min(1) })).mutation(async ({ input }) => { await db.reorderAlbums(input.albumIds); return { success: true }; }),
+    aiSettings: publicProcedure.query(() => db.getAiSettings()),
+    updateAiSettings: publicProcedure.input(z.object({ enabled: z.boolean().optional(), autoAnalyzeNew: z.boolean().optional(), model: aiModel.optional() })).mutation(({ input }) => db.updateAiSettings(input)),
+    analyzeNewJewelleryImage: publicProcedure.input(z.object({ imageId: z.number().int().positive() })).mutation(({ input }) => runNewJewelleryAnalysis(input.imageId)),
+    approveJewellerySuggestion: publicProcedure.input(z.object({ imageId: z.number().int().positive(), name: z.string().min(1).max(120).optional(), description: z.string().max(160).optional(), assignAlbum: z.boolean() })).mutation(({ input }) => db.approveJewellerySuggestion(input)),
+    dismissJewellerySuggestion: publicProcedure.input(z.object({ imageId: z.number().int().positive() })).mutation(async ({ input }) => { await db.dismissJewellerySuggestion(input.imageId); return { success: true }; }),
   }),
 });
 
