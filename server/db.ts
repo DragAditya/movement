@@ -124,10 +124,10 @@ export type AiModel = "gemini-3-flash-preview" | "gemini-3.1-pro-preview" | "gem
 
 export async function getAiSettings() {
   const db = await getDb();
-  if (!db) return { id: 0, enabled: false, autoAnalyzeNew: false, provider: "builtin" as AiProvider, model: "gemini-3-flash-preview" as AiModel, batchSize: 8 };
+  if (!db) return { id: 0, enabled: false, autoAnalyzeNew: true, provider: "builtin" as AiProvider, model: "gemini-3-flash-preview" as AiModel, batchSize: 8 };
   const [existing] = await db.select().from(aiSettings).limit(1);
   if (existing) return existing;
-  await db.insert(aiSettings).values({ enabled: false, autoAnalyzeNew: false, provider: "builtin", model: "gemini-3-flash-preview", batchSize: 8 });
+  await db.insert(aiSettings).values({ enabled: false, autoAnalyzeNew: true, provider: "builtin", model: "gemini-3-flash-preview", batchSize: 8 });
   const [created] = await db.select().from(aiSettings).limit(1);
   return created!;
 }

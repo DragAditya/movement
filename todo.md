@@ -112,3 +112,7 @@
 - [x] Reconcile Gemini category output against explicit jewellery-type words in the suggested name and description before choosing an album.
 - [x] Show a live personal-key connection state in Studio and offer a clear secure-key update path without exposing the key.
 - [x] Verify the revised manual batch workflow’s individual Edit and Keep unassigned paths end to end.
+- [x] Automatically analyze every newly persisted unorganised upload with the selected Gemini provider.
+- [x] Keep automatic results as editable review suggestions and never auto-create or move albums.
+- [x] Update Studio wording and settings to explain the automatic new-upload workflow clearly.
+- [x] Verify a real new upload receives an automatic correct jewellery suggestion while remaining unorganised until approval.

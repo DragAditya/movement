@@ -166,6 +166,14 @@ async function runJewelleryAnalysis(imageId: number, settings: Awaited<ReturnTyp
   }
 }
 
+export async function runNewJewelleryAnalysis(imageId: number) {
+  const settings = await db.getAiSettings();
+  if (!settings.enabled || !settings.autoAnalyzeNew) return { imageId, status: "off" as const };
+  const [unorganised] = await db.getUnorganisedGalleryImages([imageId]);
+  if (!unorganised) return { imageId, status: "skipped" as const };
+  return runJewelleryAnalysis(imageId, settings);
+}
+
 export async function runJewelleryBatch(imageIds: number[]) {
   const settings = await db.getAiSettings();
   if (!settings.enabled) return { status: "off" as const, results: [] };

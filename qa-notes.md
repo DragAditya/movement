@@ -212,6 +212,16 @@ The live Edit control accepted `Gold Floral Ring` and `Gold floral ring.`. After
 
 Temporary image `390001` was deleted through the supported Library procedure. A final data check confirms zero temporary revision images, zero temporary Rings albums, the original 16 gallery images preserved, and the requested personal Gemini configuration still saved and enabled.
 
+## Automatic New-Upload Verification — In Progress
+
+With automatic Gemini analysis enabled for the personal `gemini-3.1-flash-lite` provider, temporary image `450001` was uploaded through the real `/api/upload` route. The persisted upload response returned `aiStatus: ready`, confirming analysis ran automatically before the upload response completed. Its suggestion and album-safety state will be checked before cleanup.
+
+The live Library displayed an automatic suggestion for **Flower ring**, a short factual description, and exactly one **Create Rings** suggestion. The database confirms `ready`, `autoAnalyzeNew: 1`, the personal Flash-Lite provider, zero custom-album memberships, and no automatic album creation or move.
+
+The temporary image `450001` was removed through the supported Library procedure. The original gallery count is back to 14, and automatic analysis remains intentionally enabled as `personal | gemini-3.1-flash-lite | enabled | autoAnalyzeNew`.
+
+At 390 × 844, the Studio settings clearly show **Automatic Gemini checks** enabled with the personal Gemini provider and connected-key state. The corresponding mobile Library describes automatic review while keeping an empty unorganised inbox free of clutter.
+
 When enabled, only newly persisted uploads trigger the server-side jewellery workflow. Gemini receives the image through a short-lived storage URL and returns strict structured output: one short English name, one very short description, and one jewellery category. The backend reuses a matching existing custom album when available; otherwise it proposes only one simple new album. The user must explicitly Approve, Edit, or Keep unassigned before an image is renamed or assigned. Existing album members are preserved during approval.
 
 ## Loading, Upload Queue, and Albums Refinement

@@ -1,0 +1,1 @@
+ALTER TABLE `aiSettings` MODIFY COLUMN `autoAnalyzeNew` boolean NOT NULL DEFAULT true;

@@ -11,6 +11,7 @@ import { serveStatic, setupVite } from "./vite";
 import { storagePut } from "../storage";
 import { nanoid } from "nanoid";
 import { createGalleryImage } from "../db";
+import { runNewJewelleryAnalysis } from "../jewelleryAi";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -52,7 +53,8 @@ async function startServer() {
       const stored = await storagePut(`gallery/originals/${nanoid()}-${filename}`, req.body, contentType);
       try {
         const image = await createGalleryImage({ originalKey: stored.key, originalUrl: stored.url, filename, mimeType: contentType, fileSize: req.body.length, width, height });
-        res.status(201).json({ key: stored.key, url: stored.url, stored: true, persisted: true, imageId: image?.id });
+        const analysis = image ? await runNewJewelleryAnalysis(image.id) : undefined;
+        res.status(201).json({ key: stored.key, url: stored.url, stored: true, persisted: true, imageId: image?.id, aiStatus: analysis?.status });
       } catch (indexError) {
         console.error("[Upload] Image stored but record indexing failed", indexError);
         res.status(202).json({ key: stored.key, url: stored.url, stored: true, persisted: false, filename, mimeType: contentType, fileSize: req.body.length, width, height });
@@ -70,7 +72,8 @@ async function startServer() {
     }
     try {
       const image = await createGalleryImage({ originalKey: body.key, originalUrl: body.url, filename: body.filename, mimeType: body.mimeType, fileSize: body.fileSize, width: body.width, height: body.height });
-      res.status(201).json({ persisted: true, imageId: image?.id });
+      const analysis = image ? await runNewJewelleryAnalysis(image.id) : undefined;
+      res.status(201).json({ persisted: true, imageId: image?.id, aiStatus: analysis?.status });
     } catch (error) {
       console.error("[Upload] Pending record reconciliation failed", error);
       res.status(503).json({ persisted: false, error: "Image is safely stored and will be indexed when the connection is ready." });
