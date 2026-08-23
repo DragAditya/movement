@@ -51,8 +51,10 @@ export const galleryImages = mysqlTable("galleryImages", {
 export const aiSettings = mysqlTable("aiSettings", {
   id: int("id").autoincrement().primaryKey(),
   enabled: boolean("enabled").default(false).notNull(),
-  autoAnalyzeNew: boolean("autoAnalyzeNew").default(true).notNull(),
-  model: mysqlEnum("model", ["gemini-3-flash-preview", "gemini-3.1-pro-preview"]).default("gemini-3-flash-preview").notNull(),
+  autoAnalyzeNew: boolean("autoAnalyzeNew").default(false).notNull(),
+  provider: mysqlEnum("provider", ["builtin", "personal"]).default("builtin").notNull(),
+  model: mysqlEnum("model", ["gemini-3-flash-preview", "gemini-3.1-pro-preview", "gemini-3.1-flash-lite", "gemini-3.5-flash-lite"]).default("gemini-3-flash-preview").notNull(),
+  batchSize: int("batchSize").default(8).notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 

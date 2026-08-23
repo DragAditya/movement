@@ -50,7 +50,7 @@ type GalleryImageCopyInput = Pick<PersistedGalleryImage, "aiStatus" | "aiName" |
 };
 
 export function resolveVisibleImageCopy(image: GalleryImageCopyInput) {
-  const hasReadyAiName = (image.aiStatus === "ready" || image.aiStatus === "approved") && Boolean(image.aiName);
+  const hasReadyAiName = image.aiStatus === "approved" && Boolean(image.aiName);
   return {
     title: hasReadyAiName ? image.aiName! : image.filename.replace(/\.[^/.]+$/, ""),
     caption: hasReadyAiName && image.aiDescription ? image.aiDescription : image.caption ?? "Uploaded gallery image.",
@@ -117,5 +117,5 @@ export function usePersistedGallery() {
   const systemAlbum = albums.find(album => album.kind === "system") ?? null;
   const customAlbums = albums.filter(album => album.kind === "custom");
 
-  return { ...query, isLoading: query.isLoading || previewLoading, images, albums, customAlbums, systemAlbum, unassignedImages, smartAlbums, albumImages, smartImages, aiSettings: dashboard?.aiSettings ?? { enabled: false, autoAnalyzeNew: true, model: "gemini-3-flash-preview" as const } };
+  return { ...query, isLoading: query.isLoading || previewLoading, images, albums, customAlbums, systemAlbum, unassignedImages, smartAlbums, albumImages, smartImages, aiSettings: dashboard?.aiSettings ?? { enabled: false, autoAnalyzeNew: false, provider: "builtin" as const, model: "gemini-3-flash-preview" as const, batchSize: 8 } };
 }

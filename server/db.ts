@@ -119,19 +119,20 @@ export async function createGalleryImage(input: GalleryImageInput) {
   return image;
 }
 
-export type AiModel = "gemini-3-flash-preview" | "gemini-3.1-pro-preview";
+export type AiProvider = "builtin" | "personal";
+export type AiModel = "gemini-3-flash-preview" | "gemini-3.1-pro-preview" | "gemini-3.1-flash-lite" | "gemini-3.5-flash-lite";
 
 export async function getAiSettings() {
   const db = await getDb();
-  if (!db) return { id: 0, enabled: false, autoAnalyzeNew: true, model: "gemini-3-flash-preview" as AiModel };
+  if (!db) return { id: 0, enabled: false, autoAnalyzeNew: false, provider: "builtin" as AiProvider, model: "gemini-3-flash-preview" as AiModel, batchSize: 8 };
   const [existing] = await db.select().from(aiSettings).limit(1);
   if (existing) return existing;
-  await db.insert(aiSettings).values({ enabled: false, autoAnalyzeNew: true, model: "gemini-3-flash-preview" });
+  await db.insert(aiSettings).values({ enabled: false, autoAnalyzeNew: false, provider: "builtin", model: "gemini-3-flash-preview", batchSize: 8 });
   const [created] = await db.select().from(aiSettings).limit(1);
   return created!;
 }
 
-export async function updateAiSettings(input: Partial<{ enabled: boolean; autoAnalyzeNew: boolean; model: AiModel }>) {
+export async function updateAiSettings(input: Partial<{ enabled: boolean; autoAnalyzeNew: boolean; provider: AiProvider; model: AiModel; batchSize: number }>) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   const settings = await getAiSettings();
@@ -145,6 +146,18 @@ export async function getGalleryImage(imageId: number) {
   const [image] = await db.select().from(galleryImages).where(eq(galleryImages.id, imageId)).limit(1);
   if (!image) throw new Error("Image not found");
   return image;
+}
+
+export async function getUnorganisedGalleryImages(imageIds: number[]) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  if (!imageIds.length) return [];
+  const [images, memberships] = await Promise.all([
+    db.select().from(galleryImages).where(inArray(galleryImages.id, imageIds)),
+    db.select({ imageId: albumImages.imageId }).from(albumImages).where(inArray(albumImages.imageId, imageIds)),
+  ]);
+  const assigned = new Set(memberships.map(membership => membership.imageId));
+  return images.filter(image => !assigned.has(image.id));
 }
 
 export async function markImageAiStatus(imageId: number, status: "queued" | "analyzing" | "failed", error?: string) {
@@ -170,9 +183,13 @@ export async function approveJewellerySuggestion(input: { imageId: number; name?
   if (input.assignAlbum) {
     targetAlbumId = image.aiSuggestedAlbumId;
     if (!targetAlbumId && image.aiSuggestedNewAlbum) {
-      const slug = `${image.aiSuggestedNewAlbum.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}-${Date.now().toString(36)}`;
-      const created = await createAlbum({ slug, name: image.aiSuggestedNewAlbum, description: "", visibility: "public", presentationMode: "immersive", accent: "stone", sortOrder: 0 });
-      targetAlbumId = created.id;
+      const [existingAlbum] = await db.select().from(albums).where(and(eq(albums.kind, "custom"), eq(albums.name, image.aiSuggestedNewAlbum))).limit(1);
+      if (existingAlbum) targetAlbumId = existingAlbum.id;
+      else {
+        const slug = `${image.aiSuggestedNewAlbum.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}-${Date.now().toString(36)}`;
+        const created = await createAlbum({ slug, name: image.aiSuggestedNewAlbum, description: "", visibility: "public", presentationMode: "immersive", accent: "stone", sortOrder: 0 });
+        targetAlbumId = created.id;
+      }
     }
   }
   await db.update(galleryImages).set({ caption: description, aiName: name, aiDescription: description, aiStatus: "approved", aiError: null }).where(eq(galleryImages.id, input.imageId));
@@ -181,6 +198,22 @@ export async function approveJewellerySuggestion(input: { imageId: number; name?
     await setAlbumImages(targetAlbumId, [...existingMembers.map(member => member.imageId), image.id]);
   }
   return { image: await getGalleryImage(input.imageId), albumId: targetAlbumId };
+}
+
+export async function approveJewelleryBatch(imageIds: number[]) {
+  const uniqueIds = Array.from(new Set(imageIds));
+  const appliedIds: number[] = [];
+  const skippedIds: number[] = [];
+  for (const imageId of uniqueIds) {
+    const image = await getGalleryImage(imageId);
+    if (image.aiStatus !== "ready") {
+      skippedIds.push(imageId);
+      continue;
+    }
+    await approveJewellerySuggestion({ imageId, assignAlbum: true });
+    appliedIds.push(imageId);
+  }
+  return { appliedIds, skippedIds };
 }
 
 export async function dismissJewellerySuggestion(imageId: number) {
@@ -257,7 +290,7 @@ async function ensureAllImagesAlbum(db: NonNullable<Awaited<ReturnType<typeof ge
 
 export async function getAlbumDashboard() {
   const db = await getDb();
-  if (!db) return { albums: [], images: [], memberships: [], aiSettings: { enabled: false, autoAnalyzeNew: true, model: "gemini-3-flash-preview" as AiModel } };
+  if (!db) return { albums: [], images: [], memberships: [], aiSettings: { enabled: false, autoAnalyzeNew: false, provider: "builtin" as AiProvider, model: "gemini-3-flash-preview" as AiModel, batchSize: 8 } };
   await ensureAllImagesAlbum(db);
   const [albumRows, imageRows, membershipRows] = await Promise.all([
     db.select().from(albums).orderBy(albums.sortOrder, albums.createdAt),

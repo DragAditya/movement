@@ -102,3 +102,13 @@
 - [x] Approve a temporary AI suggestion into an existing, populated jewellery album and verify that its original member remains alongside the new image.
 - [x] Show the ready AI name and description immediately while keeping all album changes approval-only.
 - [x] Surface the ready AI description on the unassigned Library tile before album approval and verify it live.
+- [x] Stop automatic per-upload AI analysis so new uploads remain unorganised until a user starts analysis.
+- [x] Add a user-controlled batch analysis workflow for selected unorganised jewellery uploads.
+- [x] Keep names and descriptions as suggestions until the user applies a batch or individual review decision.
+- [x] Add secure optional user Gemini API-key configuration and saved provider selection without exposing keys to the client.
+- [x] Clarify the built-in Gemini model currently used and provide accurate model choices in Studio settings.
+- [x] Refine the mobile Albums workspace so custom album rows retain an intentional, compact presentation.
+- [x] Verify manual batch analysis, per-image correction, album approval, mobile layout, and credential-safe behavior end to end.
+- [x] Reconcile Gemini category output against explicit jewellery-type words in the suggested name and description before choosing an album.
+- [x] Show a live personal-key connection state in Studio and offer a clear secure-key update path without exposing the key.
+- [x] Verify the revised manual batch workflow’s individual Edit and Keep unassigned paths end to end.

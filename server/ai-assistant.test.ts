@@ -8,6 +8,7 @@ const dbMocks = vi.hoisted(() => ({
   getAlbumDashboard: vi.fn(),
   saveJewellerySuggestion: vi.fn(),
   approveJewellerySuggestion: vi.fn(),
+  approveJewelleryBatch: vi.fn(),
   dismissJewellerySuggestion: vi.fn(),
   createAlbum: vi.fn(),
   updateAlbum: vi.fn(),
@@ -18,7 +19,7 @@ const dbMocks = vi.hoisted(() => ({
 }));
 
 const aiMocks = vi.hoisted(() => ({
-  runNewJewelleryAnalysis: vi.fn(),
+  runJewelleryBatch: vi.fn(),
 }));
 
 vi.mock("./db", () => dbMocks);
@@ -32,27 +33,40 @@ const context = { user: null, req: { protocol: "https", headers: {} }, res: {} }
 describe("jewellery AI procedures", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    aiMocks.runNewJewelleryAnalysis.mockResolvedValue({ status: "ready" });
+    aiMocks.runJewelleryBatch.mockResolvedValue({ status: "complete", results: [], skippedIds: [] });
   });
 
   it("saves optional AI settings", async () => {
-    await appRouter.createCaller(context).gallery.updateAiSettings({ enabled: true, model: "gemini-3.1-pro-preview" });
-    expect(dbMocks.updateAiSettings).toHaveBeenCalledWith({ enabled: true, model: "gemini-3.1-pro-preview" });
+    await appRouter.createCaller(context).gallery.updateAiSettings({ enabled: true, provider: "personal", model: "gemini-3.1-flash-lite", batchSize: 6 });
+    expect(dbMocks.updateAiSettings).toHaveBeenCalledWith({ enabled: true, provider: "personal", model: "gemini-3.1-flash-lite", batchSize: 6 });
   });
 
-  it("analyzes a new upload only when AI assistance is enabled", async () => {
-    await expect(appRouter.createCaller(context).gallery.analyzeNewJewelleryImage({ imageId: 11 })).resolves.toEqual({ status: "ready" });
-    expect(aiMocks.runNewJewelleryAnalysis).toHaveBeenCalledWith(11);
+  it("exposes only a safe personal-key configured flag to Studio", async () => {
+    const status = await appRouter.createCaller(context).gallery.getAiProviderStatus();
+    expect(typeof status.personalKeyConfigured).toBe("boolean");
+    expect(status).not.toHaveProperty("key");
+    expect(status).not.toHaveProperty("apiKey");
   });
 
-  it("does not analyze new uploads when assistance is disabled", async () => {
-    aiMocks.runNewJewelleryAnalysis.mockResolvedValue({ status: "off" });
-    await expect(appRouter.createCaller(context).gallery.analyzeNewJewelleryImage({ imageId: 11 })).resolves.toEqual({ status: "off" });
-    expect(aiMocks.runNewJewelleryAnalysis).toHaveBeenCalledWith(11);
+  it("analyzes only the selected unorganised uploads in a manual batch", async () => {
+    await expect(appRouter.createCaller(context).gallery.analyzeUnorganisedJewelleryBatch({ imageIds: [11, 12] })).resolves.toEqual({ status: "complete", results: [], skippedIds: [] });
+    expect(aiMocks.runJewelleryBatch).toHaveBeenCalledWith([11, 12]);
+  });
+
+  it("returns the manual batch's disabled status without analysing an upload automatically", async () => {
+    aiMocks.runJewelleryBatch.mockResolvedValue({ status: "off", results: [] });
+    await expect(appRouter.createCaller(context).gallery.analyzeUnorganisedJewelleryBatch({ imageIds: [11] })).resolves.toEqual({ status: "off", results: [] });
+    expect(aiMocks.runJewelleryBatch).toHaveBeenCalledWith([11]);
   });
 
   it("requires an explicit approval choice before applying a suggestion", async () => {
     await appRouter.createCaller(context).gallery.approveJewellerySuggestion({ imageId: 11, name: "Gold Floral Ring", description: "Gold floral ring.", assignAlbum: true });
     expect(dbMocks.approveJewellerySuggestion).toHaveBeenCalledWith({ imageId: 11, name: "Gold Floral Ring", description: "Gold floral ring.", assignAlbum: true });
+  });
+
+  it("applies a reviewed batch only through the explicit batch approval procedure", async () => {
+    dbMocks.approveJewelleryBatch.mockResolvedValue({ appliedIds: [11, 12], skippedIds: [] });
+    await expect(appRouter.createCaller(context).gallery.approveJewelleryBatch({ imageIds: [11, 12] })).resolves.toEqual({ appliedIds: [11, 12], skippedIds: [] });
+    expect(dbMocks.approveJewelleryBatch).toHaveBeenCalledWith([11, 12]);
   });
 });

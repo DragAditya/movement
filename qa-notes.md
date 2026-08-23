@@ -190,6 +190,28 @@ The ready, still-unassigned Library tile visibly showed **Textured Gold Flower R
 
 That final QA image was deleted and AI Assistance returned to disabled. The release data check found zero temporary records from this final pass and the original 10 gallery images intact.
 
+## Manual Gemini Batch Revision — In Progress
+
+A temporary gold ring was uploaded after the revised workflow was deployed. Gemini batch review was enabled with the securely configured personal provider and `gemini-3.1-flash-lite`; automatic upload analysis remained disabled. The persisted upload is image `360001` and will be checked in its unorganised state before an explicit batch request is made.
+
+The image remained `off` with no custom-album membership immediately after upload. Its first personal-provider request exposed a native Gemini schema mismatch, which was corrected using Google’s uppercase structured-schema types. The explicit retry then returned `complete` with image `360001` marked ready.
+
+The model’s visible copy correctly described a flower ring, but its initial category field was inconsistent and then its exact album match exposed a second rule bug: the old substring matcher treated “Earrings” as a match for “Rings.” The new consistency guard takes explicit type words from the generated name and description, while word-based album matching prevents that collision. The live review card now offers only **Create Rings**, with the image still unorganised and unchanged.
+
+A second temporary ring (`360002`) was uploaded without analysis, then both temporary unorganised ring uploads were selected in one explicit personal-Gemini batch. The batch returned complete with two ready suggestions; the grouped review and single explicit Apply all action will now be inspected.
+
+The live grouped review showed two ring suggestions, both proposing **Create Rings**, and did not move either image before action. The explicit **Apply all 2** action created exactly one temporary Rings album and assigned images `360001` and `360002` exactly once. The Library immediately returned to zero unorganised images.
+
+The temporary Rings album and both temporary images were removed through the supported Studio procedures. The original gallery count is back to 16. The requested configuration remains saved and enabled as `personal | gemini-3.1-flash-lite | batch size 2`; the API key itself remains server-side only.
+
+Responsive review at 390 × 844 confirms the revised Library inbox, personal-key Gemini settings, and batch-size selector are readable and reachable. The Albums workspace now uses compact 112 px cover cards with preserved image previews, concise metadata, and visible edit/reorder/delete controls rather than the taller mobile card treatment in the reported screenshot.
+
+For final individual-review coverage, temporary image `390001` was uploaded with automatic analysis still disabled, then selected in an explicit personal Gemini batch. The response returned `ready`; its suggestion will be edited, kept unassigned, and then checked for saved copy without album membership.
+
+The live Edit control accepted `Gold Floral Ring` and `Gold floral ring.`. After **Keep unassigned**, the Library kept the image in the unorganised inbox while showing the corrected title. The persisted row is `approved`, carries the edited name, description, and caption, and has zero custom-album memberships.
+
+Temporary image `390001` was deleted through the supported Library procedure. A final data check confirms zero temporary revision images, zero temporary Rings albums, the original 16 gallery images preserved, and the requested personal Gemini configuration still saved and enabled.
+
 When enabled, only newly persisted uploads trigger the server-side jewellery workflow. Gemini receives the image through a short-lived storage URL and returns strict structured output: one short English name, one very short description, and one jewellery category. The backend reuses a matching existing custom album when available; otherwise it proposes only one simple new album. The user must explicitly Approve, Edit, or Keep unassigned before an image is renamed or assigned. Existing album members are preserved during approval.
 
 ## Loading, Upload Queue, and Albums Refinement

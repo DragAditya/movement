@@ -4,12 +4,13 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import * as db from "./db";
-import { runNewJewelleryAnalysis } from "./jewelleryAi";
+import { runJewelleryBatch } from "./jewelleryAi";
 
 const presentationMode = z.enum(["standard", "immersive", "kiosk"]);
 const visibility = z.enum(["public", "private"]);
 const slideshowMode = z.enum(["fade", "crossfade", "slide", "instant"]);
-const aiModel = z.enum(["gemini-3-flash-preview", "gemini-3.1-pro-preview"]);
+const aiProvider = z.enum(["builtin", "personal"]);
+const aiModel = z.enum(["gemini-3-flash-preview", "gemini-3.1-pro-preview", "gemini-3.1-flash-lite", "gemini-3.5-flash-lite"]);
 
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -42,9 +43,11 @@ export const appRouter = router({
     setAlbumImages: publicProcedure.input(z.object({ albumId: z.number().int().positive(), imageIds: z.array(z.number().int().positive()) })).mutation(async ({ input }) => { await db.setAlbumImages(input.albumId, input.imageIds); return { success: true }; }),
     reorderAlbums: publicProcedure.input(z.object({ albumIds: z.array(z.number().int().positive()).min(1) })).mutation(async ({ input }) => { await db.reorderAlbums(input.albumIds); return { success: true }; }),
     aiSettings: publicProcedure.query(() => db.getAiSettings()),
-    updateAiSettings: publicProcedure.input(z.object({ enabled: z.boolean().optional(), autoAnalyzeNew: z.boolean().optional(), model: aiModel.optional() })).mutation(({ input }) => db.updateAiSettings(input)),
-    analyzeNewJewelleryImage: publicProcedure.input(z.object({ imageId: z.number().int().positive() })).mutation(({ input }) => runNewJewelleryAnalysis(input.imageId)),
+    updateAiSettings: publicProcedure.input(z.object({ enabled: z.boolean().optional(), autoAnalyzeNew: z.boolean().optional(), provider: aiProvider.optional(), model: aiModel.optional(), batchSize: z.number().int().min(1).max(12).optional() })).mutation(({ input }) => db.updateAiSettings(input)),
+    getAiProviderStatus: publicProcedure.query(() => ({ personalKeyConfigured: Boolean(process.env.GEMINI_API_KEY) })),
+    analyzeUnorganisedJewelleryBatch: publicProcedure.input(z.object({ imageIds: z.array(z.number().int().positive()).min(1).max(12) })).mutation(({ input }) => runJewelleryBatch(input.imageIds)),
     approveJewellerySuggestion: publicProcedure.input(z.object({ imageId: z.number().int().positive(), name: z.string().min(1).max(120).optional(), description: z.string().max(160).optional(), assignAlbum: z.boolean() })).mutation(({ input }) => db.approveJewellerySuggestion(input)),
+    approveJewelleryBatch: publicProcedure.input(z.object({ imageIds: z.array(z.number().int().positive()).min(1).max(12) })).mutation(({ input }) => db.approveJewelleryBatch(input.imageIds)),
     dismissJewellerySuggestion: publicProcedure.input(z.object({ imageId: z.number().int().positive() })).mutation(async ({ input }) => { await db.dismissJewellerySuggestion(input.imageId); return { success: true }; }),
   }),
 });
