@@ -1,5 +1,7 @@
 import { trpc } from "@/lib/trpc";
 import { unassignedImageIds } from "@/lib/album-membership";
+import { resolveThumbnailSource, warmGalleryImages } from "@/lib/image-preload";
+import { useEffect, useMemo } from "react";
 
 export type SmartGroup = "personal" | "screens" | "projects";
 
@@ -7,6 +9,7 @@ export type PersistedGalleryImage = {
   id: string;
   recordId: number;
   src: string;
+  thumbnailSrc: string;
   alt: string;
   title: string;
   caption: string;
@@ -57,12 +60,13 @@ export function resolveVisibleImageCopy(image: GalleryImageCopyInput) {
   };
 }
 
-function toImage(image: { id: number; originalUrl: string; filename: string; caption: string | null; smartGroup: SmartGroup; width: number | null; height: number | null; createdAt: Date; aiStatus: PersistedGalleryImage["aiStatus"]; aiName: string | null; aiDescription: string | null; aiSuggestedAlbumId: number | null; aiSuggestedNewAlbum: string | null; aiError: string | null }): PersistedGalleryImage {
+function toImage(image: { id: number; originalUrl: string; thumbnailUrl: string | null; filename: string; caption: string | null; smartGroup: SmartGroup; width: number | null; height: number | null; createdAt: Date; aiStatus: PersistedGalleryImage["aiStatus"]; aiName: string | null; aiDescription: string | null; aiSuggestedAlbumId: number | null; aiSuggestedNewAlbum: string | null; aiError: string | null }): PersistedGalleryImage {
   const copy = resolveVisibleImageCopy(image);
   return {
     id: `image-${image.id}`,
     recordId: image.id,
     src: image.originalUrl,
+    thumbnailSrc: resolveThumbnailSource(image.thumbnailUrl, image.originalUrl),
     alt: image.filename,
     title: copy.title,
     caption: copy.caption,
@@ -84,6 +88,20 @@ export function usePersistedGallery() {
   const query = trpc.gallery.publicDashboard.useQuery();
   const previewLoading = typeof window !== "undefined" && import.meta.env.DEV && window.sessionStorage.getItem("gallery-preview-loading") === "1";
   const dashboard = query.data;
+  const imageSources = useMemo(() => dashboard?.images.map(image => resolveThumbnailSource(image.thumbnailUrl, image.originalUrl)) ?? [], [dashboard?.images]);
+  const imageSourceKey = imageSources.join("|");
+  useEffect(() => {
+    if (!imageSources.length || typeof window === "undefined") return;
+    const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
+    if (connection?.saveData) return;
+    const warm = () => warmGalleryImages(imageSources);
+    const idle = window.requestIdleCallback?.(warm, { timeout: 900 });
+    const timeout = idle === undefined ? window.setTimeout(warm, 120) : undefined;
+    return () => {
+      if (idle !== undefined) window.cancelIdleCallback?.(idle);
+      if (timeout !== undefined) window.clearTimeout(timeout);
+    };
+  }, [imageSourceKey]);
   const images = dashboard?.images.map(toImage).sort((a, b) => b.createdAt.localeCompare(a.createdAt)) ?? [];
   const byImageId = new Map(images.map(image => [image.recordId, image]));
   const membershipByAlbum = new Map<number, number[]>();
@@ -101,7 +119,7 @@ export function usePersistedGallery() {
       name: album.name,
       description: album.description ?? "",
       coverImageId: album.coverImageId,
-      cover: album.coverImageId ? byImageId.get(album.coverImageId)?.src ?? members[0]?.src ?? null : members[0]?.src ?? null,
+      cover: album.coverImageId ? byImageId.get(album.coverImageId)?.thumbnailSrc ?? members[0]?.thumbnailSrc ?? null : members[0]?.thumbnailSrc ?? null,
       visibility: album.visibility,
       mode: album.presentationMode,
       accent: album.accent,

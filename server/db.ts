@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { aiSettings, albumImages, albums, galleryImages, InsertUser, users } from "../drizzle/schema";
 import { ENV } from './_core/env';
@@ -93,6 +93,7 @@ export async function getUserByOpenId(openId: string) {
 export type GalleryImageInput = {
   originalKey: string;
   originalUrl: string;
+  thumbnailUrl?: string;
   filename: string;
   mimeType: string;
   fileSize: number;
@@ -117,6 +118,22 @@ export async function createGalleryImage(input: GalleryImageInput) {
   await db.insert(galleryImages).values({ ...input, smartGroup: classifyImage(input) });
   const [image] = await db.select().from(galleryImages).where(eq(galleryImages.originalKey, input.originalKey)).limit(1);
   return image;
+}
+
+export async function listGalleryImagesMissingThumbnails(limit = 32) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({ id: galleryImages.id, originalKey: galleryImages.originalKey, filename: galleryImages.filename })
+    .from(galleryImages)
+    .where(isNull(galleryImages.thumbnailUrl))
+    .orderBy(desc(galleryImages.createdAt))
+    .limit(limit);
+}
+
+export async function saveGalleryThumbnail(imageId: number, thumbnailUrl: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.update(galleryImages).set({ thumbnailUrl }).where(eq(galleryImages.id, imageId));
 }
 
 export type AiProvider = "builtin" | "personal";

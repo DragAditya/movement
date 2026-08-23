@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canRemoveUploadQueueItem, resolveInterruptedUpload, resolveUploadResponse } from "./upload-status";
+import { canRemoveUploadQueueItem, canRetryUploadQueueItem, resolveInterruptedUpload, resolveUploadResponse } from "./upload-status";
 
 describe("upload result reconciliation", () => {
   it("marks an indexed stored upload as complete", () => {
@@ -25,5 +25,11 @@ describe("upload result reconciliation", () => {
   it("allows a cancelled upload activity row to be cleared without treating an active upload as removable", () => {
     expect(canRemoveUploadQueueItem("cancelled")).toBe(true);
     expect(canRemoveUploadQueueItem("uploading")).toBe(false);
+  });
+
+  it("allows an explicit retry only for failed or cancelled uploads", () => {
+    expect(canRetryUploadQueueItem("failed")).toBe(true);
+    expect(canRetryUploadQueueItem("cancelled")).toBe(true);
+    expect(canRetryUploadQueueItem("checking")).toBe(false);
   });
 });

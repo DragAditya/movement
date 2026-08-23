@@ -20,6 +20,7 @@ export type JewelleryAnalysis = {
   name: string;
   description: string;
   category: JewelleryCategory;
+  albumName: string | null;
 };
 
 export const builtinGeminiModels = ["gemini-3-flash-preview", "gemini-3.1-pro-preview"] as const;
@@ -43,8 +44,9 @@ const analysisSchema = {
     name: { type: "string" },
     description: { type: "string" },
     category: { type: "string", enum: [...jewelleryCategories] },
+    albumName: { type: "string" },
   },
-  required: ["name", "description", "category"],
+  required: ["name", "description", "category", "albumName"],
   additionalProperties: false,
 } as const;
 
@@ -54,11 +56,15 @@ const personalAnalysisSchema = {
     name: { type: "STRING" },
     description: { type: "STRING" },
     category: { type: "STRING", enum: [...jewelleryCategories] },
+    albumName: { type: "STRING" },
   },
-  required: ["name", "description", "category"],
+  required: ["name", "description", "category", "albumName"],
 } as const;
 
-export function resolveJewelleryAlbumSuggestion(category: JewelleryCategory, albums: Array<{ id: number; name: string }>) {
+export function resolveJewelleryAlbumSuggestion(category: JewelleryCategory, albums: Array<{ id: number; name: string }>, preferredAlbumName?: string | null) {
+  const preferred = preferredAlbumName?.trim().toLocaleLowerCase();
+  const explicit = preferred ? albums.find(album => album.name.trim().toLocaleLowerCase() === preferred) : undefined;
+  if (explicit) return { existingAlbumId: explicit.id, newAlbumName: null };
   const label = jewelleryCategoryLabels[category];
   const tokens = category === "other" ? ["other", "design", "designs"] : [category.slice(0, -1), category];
   const existing = albums.find(album => {
@@ -85,7 +91,8 @@ function normalizeAnalysis(value: unknown): JewelleryAnalysis {
   const resolvedName = name || "Gold Jewellery Design";
   const resolvedDescription = description || "Gold jewellery design.";
   const modelCategory = jewelleryCategories.includes(input.category as JewelleryCategory) ? input.category as JewelleryCategory : "other";
-  return { name: resolvedName, description: resolvedDescription, category: reconcileJewelleryCategory(modelCategory, resolvedName, resolvedDescription) };
+  const albumName = typeof input.albumName === "string" ? input.albumName.trim().slice(0, 180) || null : null;
+  return { name: resolvedName, description: resolvedDescription, category: reconcileJewelleryCategory(modelCategory, resolvedName, resolvedDescription), albumName };
 }
 
 export function parseModelAnalysis(content: string): unknown {
@@ -102,7 +109,13 @@ export function parseModelAnalysis(content: string): unknown {
   }
 }
 
-async function analyzeWithBuiltInGemini(input: { originalKey: string; mimeType: string; model: string }): Promise<JewelleryAnalysis> {
+function buildJewelleryInstructions(albumNames: string[]) {
+  const validNames = Array.from(new Set(albumNames.map(name => name.trim()).filter(Boolean))).slice(0, 40);
+  if (!validNames.length) return `${jewelleryInstructions} Return albumName as an empty string.`;
+  return `${jewelleryInstructions} The user-defined album names are: ${validNames.map(name => `“${name}”`).join(", ")}. Use albumName only when one listed album clearly matches the visible design; return that exact name. Otherwise return an empty string. Never invent an album name.`;
+}
+
+async function analyzeWithBuiltInGemini(input: { originalKey: string; mimeType: string; model: string; albumNames: string[] }): Promise<JewelleryAnalysis> {
   const models = await listLLMModels();
   const model = models.data.some(item => item.id === input.model) ? input.model : models.data.find(item => item.id === "gemini-3-flash-preview")?.id;
   if (!model) throw new Error("A built-in Gemini vision model is not currently available.");
@@ -111,7 +124,7 @@ async function analyzeWithBuiltInGemini(input: { originalKey: string; mimeType: 
     model,
     maxTokens: 1024,
     messages: [
-      { role: "system", content: jewelleryInstructions },
+      { role: "system", content: buildJewelleryInstructions(input.albumNames) },
       { role: "user", content: [{ type: "text", text: "Analyze this jewellery image." }, { type: "image_url", image_url: { url: signedUrl, detail: "low" } }] },
     ],
     outputSchema: { name: "jewellery_analysis", strict: true, schema: analysisSchema },
@@ -120,7 +133,7 @@ async function analyzeWithBuiltInGemini(input: { originalKey: string; mimeType: 
   return normalizeAnalysis(typeof content === "string" ? parseModelAnalysis(content) : {});
 }
 
-async function analyzeWithPersonalGemini(input: { originalKey: string; mimeType: string; model: string }): Promise<JewelleryAnalysis> {
+async function analyzeWithPersonalGemini(input: { originalKey: string; mimeType: string; model: string; albumNames: string[] }): Promise<JewelleryAnalysis> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("Add a personal Gemini API key in the secure project settings before using this provider.");
   const signedUrl = await storageGetSignedUrl(input.originalKey);
@@ -133,7 +146,7 @@ async function analyzeWithPersonalGemini(input: { originalKey: string; mimeType:
     method: "POST",
     headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
     body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: `${jewelleryInstructions} Analyze this jewellery image.` }, { inline_data: { mime_type: input.mimeType, data: bytes.toString("base64") } }] }],
+      contents: [{ role: "user", parts: [{ text: `${buildJewelleryInstructions(input.albumNames)} Analyze this jewellery image.` }, { inline_data: { mime_type: input.mimeType, data: bytes.toString("base64") } }] }],
       generationConfig: { responseMimeType: "application/json", responseSchema: personalAnalysisSchema, temperature: 0.1, maxOutputTokens: 1024 },
     }),
   });
@@ -143,21 +156,23 @@ async function analyzeWithPersonalGemini(input: { originalKey: string; mimeType:
   return normalizeAnalysis(typeof content === "string" ? parseModelAnalysis(content) : {});
 }
 
-export async function analyzeJewelleryImage(input: { originalKey: string; mimeType: string; provider: db.AiProvider; model: db.AiModel }): Promise<JewelleryAnalysis> {
+export async function analyzeJewelleryImage(input: { originalKey: string; mimeType: string; provider: db.AiProvider; model: db.AiModel; albumNames?: string[] }): Promise<JewelleryAnalysis> {
   const model = resolveProviderModel(input.provider, input.model);
+  const albumNames = input.albumNames ?? [];
   return input.provider === "personal"
-    ? analyzeWithPersonalGemini({ ...input, model })
-    : analyzeWithBuiltInGemini({ ...input, model });
+    ? analyzeWithPersonalGemini({ ...input, model, albumNames })
+    : analyzeWithBuiltInGemini({ ...input, model, albumNames });
 }
 
 async function runJewelleryAnalysis(imageId: number, settings: Awaited<ReturnType<typeof db.getAiSettings>>) {
   await db.markImageAiStatus(imageId, "queued");
   try {
     await db.markImageAiStatus(imageId, "analyzing");
-    const image = await db.getGalleryImage(imageId);
-    const analysis = await analyzeJewelleryImage({ originalKey: image.originalKey, mimeType: image.mimeType, provider: settings.provider, model: settings.model });
     const dashboard = await db.getAlbumDashboard();
-    const suggestion = resolveJewelleryAlbumSuggestion(analysis.category, dashboard.albums.filter(album => album.kind === "custom").map(album => ({ id: album.id, name: album.name })));
+    const customAlbums = dashboard.albums.filter(album => album.kind === "custom").map(album => ({ id: album.id, name: album.name }));
+    const image = await db.getGalleryImage(imageId);
+    const analysis = await analyzeJewelleryImage({ originalKey: image.originalKey, mimeType: image.mimeType, provider: settings.provider, model: settings.model, albumNames: customAlbums.map(album => album.name) });
+    const suggestion = resolveJewelleryAlbumSuggestion(analysis.category, customAlbums, analysis.albumName);
     await db.saveJewellerySuggestion({ imageId, name: analysis.name, description: analysis.description, suggestedAlbumId: suggestion.existingAlbumId, suggestedNewAlbum: suggestion.newAlbumName, model: resolveProviderModel(settings.provider, settings.model) });
     return { imageId, status: "ready" as const };
   } catch (error) {

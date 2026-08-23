@@ -16,6 +16,10 @@ describe("jewellery album suggestions", () => {
   it("does not treat Earrings as a Rings album because it only contains the same letters", () => {
     expect(resolveJewelleryAlbumSuggestion("rings", [{ id: 4, name: "Earrings" }])).toEqual({ existingAlbumId: null, newAlbumName: "Rings" });
   });
+
+  it("prioritizes one exact user-defined album name chosen by Gemini", () => {
+    expect(resolveJewelleryAlbumSuggestion("other", [{ id: 4, name: "Bridal Anklets" }, { id: 8, name: "Other Designs" }], "Bridal Anklets")).toEqual({ existingAlbumId: 4, newAlbumName: null });
+  });
 });
 
 describe("Gemini jewellery response parsing", () => {

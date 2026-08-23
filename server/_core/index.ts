@@ -8,10 +8,37 @@ import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
-import { storagePut } from "../storage";
+import { storageGetSignedUrl, storagePut } from "../storage";
 import { nanoid } from "nanoid";
-import { createGalleryImage } from "../db";
+import { createGalleryImage, listGalleryImagesMissingThumbnails, saveGalleryThumbnail } from "../db";
 import { runNewJewelleryAnalysis } from "../jewelleryAi";
+import sharp from "sharp";
+
+const thumbnailMaxSide = 960;
+
+async function storeGalleryThumbnail(source: Buffer, filename: string) {
+  const thumbnail = await sharp(source, { failOn: "none", limitInputPixels: 64_000_000 })
+    .rotate()
+    .resize(thumbnailMaxSide, thumbnailMaxSide, { fit: "inside", withoutEnlargement: true })
+    .jpeg({ quality: 76, mozjpeg: true })
+    .toBuffer();
+  return storagePut(`gallery/thumbnails/${nanoid()}-${filename.replace(/\.[^/.]+$/, "")}.jpg`, thumbnail, "image/jpeg");
+}
+
+async function backfillGalleryThumbnails() {
+  const missing = await listGalleryImagesMissingThumbnails();
+  for (const image of missing) {
+    try {
+      const signedUrl = await storageGetSignedUrl(image.originalKey);
+      const response = await fetch(signedUrl);
+      if (!response.ok) throw new Error(`Original download failed (${response.status})`);
+      const thumbnail = await storeGalleryThumbnail(Buffer.from(await response.arrayBuffer()), image.filename);
+      await saveGalleryThumbnail(image.id, thumbnail.url);
+    } catch (error) {
+      console.warn(`[Thumbnail] Could not prepare ${image.id}`, error);
+    }
+  }
+}
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -51,13 +78,19 @@ async function startServer() {
     const height = Number(req.headers["x-image-height"] ?? 0) || undefined;
     try {
       const stored = await storagePut(`gallery/originals/${nanoid()}-${filename}`, req.body, contentType);
+      let thumbnailUrl: string | undefined;
       try {
-        const image = await createGalleryImage({ originalKey: stored.key, originalUrl: stored.url, filename, mimeType: contentType, fileSize: req.body.length, width, height });
+        thumbnailUrl = (await storeGalleryThumbnail(req.body, filename)).url;
+      } catch (thumbnailError) {
+        console.warn("[Upload] Original stored without a thumbnail", thumbnailError);
+      }
+      try {
+        const image = await createGalleryImage({ originalKey: stored.key, originalUrl: stored.url, thumbnailUrl, filename, mimeType: contentType, fileSize: req.body.length, width, height });
         const analysis = image ? await runNewJewelleryAnalysis(image.id) : undefined;
-        res.status(201).json({ key: stored.key, url: stored.url, stored: true, persisted: true, imageId: image?.id, aiStatus: analysis?.status });
+        res.status(201).json({ key: stored.key, url: stored.url, thumbnailUrl, stored: true, persisted: true, imageId: image?.id, aiStatus: analysis?.status });
       } catch (indexError) {
         console.error("[Upload] Image stored but record indexing failed", indexError);
-        res.status(202).json({ key: stored.key, url: stored.url, stored: true, persisted: false, filename, mimeType: contentType, fileSize: req.body.length, width, height });
+        res.status(202).json({ key: stored.key, url: stored.url, thumbnailUrl, stored: true, persisted: false, filename, mimeType: contentType, fileSize: req.body.length, width, height });
       }
     } catch (error) {
       console.error("[Upload] Failed before image storage completed", error);
@@ -65,13 +98,13 @@ async function startServer() {
     }
   });
   app.post("/api/upload/reconcile", express.json({ limit: "1mb" }), async (req, res) => {
-    const body = req.body as { key?: string; url?: string; filename?: string; mimeType?: string; fileSize?: number; width?: number; height?: number };
+    const body = req.body as { key?: string; url?: string; thumbnailUrl?: string; filename?: string; mimeType?: string; fileSize?: number; width?: number; height?: number };
     if (!body.key || !body.url || !body.filename || !body.mimeType || !body.fileSize) {
       res.status(400).json({ error: "Stored image metadata is incomplete." });
       return;
     }
     try {
-      const image = await createGalleryImage({ originalKey: body.key, originalUrl: body.url, filename: body.filename, mimeType: body.mimeType, fileSize: body.fileSize, width: body.width, height: body.height });
+      const image = await createGalleryImage({ originalKey: body.key, originalUrl: body.url, thumbnailUrl: body.thumbnailUrl, filename: body.filename, mimeType: body.mimeType, fileSize: body.fileSize, width: body.width, height: body.height });
       const analysis = image ? await runNewJewelleryAnalysis(image.id) : undefined;
       res.status(201).json({ persisted: true, imageId: image?.id, aiStatus: analysis?.status });
     } catch (error) {
@@ -105,6 +138,7 @@ async function startServer() {
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
+    void backfillGalleryThumbnails();
   });
 }
 

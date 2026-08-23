@@ -3,6 +3,7 @@ export type UploadResponsePayload = {
   stored?: boolean;
   key?: string;
   url?: string;
+  thumbnailUrl?: string;
   filename?: string;
   mimeType?: string;
   fileSize?: number;
@@ -34,4 +35,8 @@ export function isCompletedUploadQueueItem(status: UploadQueueStatus) {
 
 export function canRemoveUploadQueueItem(status: UploadQueueStatus) {
   return isCompletedUploadQueueItem(status) || status === "cancelled";
+}
+
+export function canRetryUploadQueueItem(status: UploadQueueStatus) {
+  return status === "failed" || status === "cancelled";
 }

@@ -2,19 +2,21 @@ import AppHeader from "@/components/AppHeader";
 import { AdminAlbumGridSkeleton, AdminImageGridSkeleton } from "@/components/GallerySkeletons";
 import { brand } from "@/lib/brand";
 import { resolveAlbumCoverPreview } from "@/lib/album-editor";
+import { imageLoadAttributes } from "@/lib/image-preload";
 import { usePersistedGallery, type PersistedAlbum, type PersistedGalleryImage } from "@/lib/persisted-gallery";
 import { trpc } from "@/lib/trpc";
-import { canRemoveUploadQueueItem, isCompletedUploadQueueItem, resolveInterruptedUpload, resolveUploadResponse, type UploadQueueStatus, type UploadResponsePayload } from "@/lib/upload-status";
+import { canRemoveUploadQueueItem, canRetryUploadQueueItem, isCompletedUploadQueueItem, resolveInterruptedUpload, resolveUploadResponse, type UploadQueueStatus, type UploadResponsePayload } from "@/lib/upload-status";
 import { Activity, Album, ArrowDownUp, Check, ChevronDown, ChevronUp, CloudUpload, Eye, EyeOff, FolderPlus, Grid2X2, Image as ImageIcon, LayoutList, Library, Monitor, MoreHorizontal, Pencil, Plus, Presentation, RefreshCw, Settings2, Sparkles, Trash2, UploadCloud, X } from "lucide-react";
 import { ChangeEvent, DragEvent, useEffect, useMemo, useRef, useState } from "react";
 
 type QueueStatus = UploadQueueStatus;
-type QueueItem = { id: string; file: File; preview: string; progress: number; status: QueueStatus; error?: string };
+type QueueItem = { id: string; file: File; transferFile?: File; preview: string; progress: number; status: QueueStatus; error?: string; optimized?: boolean };
 type Tab = "library" | "albums" | "presentation" | "activity";
 type AlbumDraft = { id?: number; name: string; description: string; visibility: "public" | "private"; presentationMode: "standard" | "immersive" | "kiosk"; accent: string; coverImageId: string; imageIds: number[] };
 type ActivityEvent = { id: string; title: string; detail: string; time: string };
 
 const maxFileSize = 50 * 1024 * 1024;
+const preferredTransferBytes = 80 * 1024;
 const acceptedTypes = ["image/jpeg", "image/png", "image/webp", "image/avif"];
 const blankDraft = (): AlbumDraft => ({ name: "", description: "", visibility: "public", presentationMode: "immersive", accent: "indigo", coverImageId: "", imageIds: [] });
 const initialAdminTab = (): Tab => {
@@ -29,6 +31,47 @@ function getDimensions(file: File) {
     image.onerror = () => { resolve({ width: 0, height: 0 }); URL.revokeObjectURL(url); };
     image.src = url;
   });
+}
+
+function shouldOptimizeUpload(file: File) {
+  return file.size > preferredTransferBytes;
+}
+
+function canvasBlob(canvas: HTMLCanvasElement, quality: number) {
+  return new Promise<Blob | null>(resolve => canvas.toBlob(resolve, "image/jpeg", quality));
+}
+
+async function prepareUploadFile(file: File) {
+  if (!shouldOptimizeUpload(file)) return { file, optimized: false };
+  const sourceUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const element = new Image();
+      element.onload = () => resolve(element);
+      element.onerror = () => reject(new Error("Image could not be prepared."));
+      element.src = sourceUrl;
+    });
+    for (const maxSide of [1600, 1280, 960, 800]) {
+      const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+      const context = canvas.getContext("2d");
+      if (!context) break;
+      context.fillStyle = "#fff";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      for (const quality of [.86, .76, .66, .58]) {
+        const blob = await canvasBlob(canvas, quality);
+        if (blob && blob.size <= preferredTransferBytes) {
+          return { file: new File([blob], `${file.name.replace(/\.[^/.]+$/, "")}.jpg`, { type: "image/jpeg" }), optimized: true };
+        }
+      }
+    }
+  } finally {
+    URL.revokeObjectURL(sourceUrl);
+  }
+  return { file, optimized: false };
 }
 
 export default function Admin() {
@@ -76,7 +119,7 @@ export default function Admin() {
     }
   };
 
-  const reconcileStored = async (item: QueueItem, payload: { key: string; url: string; filename: string; mimeType: string; fileSize: number; width?: number; height?: number }) => {
+  const reconcileStored = async (item: QueueItem, payload: { key: string; url: string; thumbnailUrl?: string; filename: string; mimeType: string; fileSize: number; width?: number; height?: number }) => {
     updateQueue(item.id, { status: "indexing", progress: 100 });
     try {
       const response = await fetch("/api/upload/reconcile", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
@@ -92,10 +135,22 @@ export default function Admin() {
   };
 
   const upload = async (item: QueueItem) => {
-    const dimensions = await getDimensions(item.file);
+    let transferFile = item.transferFile;
+    let optimized = item.optimized ?? false;
+    if (!transferFile || transferFile.size > preferredTransferBytes) {
+      try {
+        const prepared = await prepareUploadFile(item.file);
+        transferFile = prepared.file;
+        optimized = prepared.optimized;
+        updateQueue(item.id, { transferFile, optimized, error: optimized ? "Optimized for a quicker, more reliable upload." : undefined });
+      } catch {
+        transferFile = item.file;
+      }
+    }
+    const dimensions = await getDimensions(transferFile);
     updateQueue(item.id, { status: "uploading", progress: 1, error: undefined });
     const xhr = new XMLHttpRequest(); xhrs.current[item.id] = xhr;
-    xhr.open("POST", "/api/upload"); xhr.setRequestHeader("content-type", item.file.type); xhr.setRequestHeader("x-file-name", encodeURIComponent(item.file.name)); xhr.setRequestHeader("x-image-width", String(dimensions.width)); xhr.setRequestHeader("x-image-height", String(dimensions.height));
+    xhr.open("POST", "/api/upload"); xhr.setRequestHeader("content-type", transferFile.type); xhr.setRequestHeader("x-file-name", encodeURIComponent(transferFile.name)); xhr.setRequestHeader("x-image-width", String(dimensions.width)); xhr.setRequestHeader("x-image-height", String(dimensions.height));
     xhr.upload.onprogress = event => { if (event.lengthComputable) updateQueue(item.id, { progress: Math.round((event.loaded / event.total) * 100) }); };
     xhr.onload = () => {
       delete xhrs.current[item.id];
@@ -108,13 +163,13 @@ export default function Admin() {
           addActivity("Image uploaded", `${item.file.name} was added to your library`);
           utils.gallery.publicDashboard.invalidate();
         } else if (resolution === "reconcile" && payload.key && payload.url && payload.filename && payload.mimeType && payload.fileSize) {
-          void reconcileStored(item, { key: payload.key, url: payload.url, filename: payload.filename, mimeType: payload.mimeType, fileSize: payload.fileSize, width: payload.width, height: payload.height });
+          void reconcileStored(item, { key: payload.key, url: payload.url, thumbnailUrl: payload.thumbnailUrl, filename: payload.filename, mimeType: payload.mimeType, fileSize: payload.fileSize, width: payload.width, height: payload.height });
         } else updateQueue(item.id, { status: "stored", progress: 100, error: "Image stored safely and awaiting library indexing." });
       } else updateQueue(item.id, { status: "failed", error: payload.error ?? "Upload could not be completed. Please retry." });
     };
     xhr.onerror = () => { delete xhrs.current[item.id]; updateQueue(item.id, { status: resolveInterruptedUpload(), error: "Connection ended while confirming the upload. Refresh the library or retry to confirm its status." }); utils.gallery.publicDashboard.invalidate(); };
     xhr.onabort = () => { delete xhrs.current[item.id]; updateQueue(item.id, { status: "cancelled", error: "Upload cancelled before confirmation." }); };
-    xhr.send(item.file);
+    xhr.send(transferFile);
   };
 
   const beginFiles = (files: FileList | File[]) => Array.from(files).forEach(file => {
@@ -179,7 +234,7 @@ export default function Admin() {
     {tab === "library" && <>
       <section className="admin-page-heading"><div><p className="eyebrow">UNORGANISED UPLOADS</p><h1>Unorganised uploads, automatically reviewed.</h1><p>Every upload remains in All Images first. Gemini checks each new design automatically and leaves its editable suggestion here for your approval.</p></div></section>
       <section className="upload-layout"><div className="upload-main">
-        <div className="drop-zone" onDragOver={event => event.preventDefault()} onDrop={(event: DragEvent) => { event.preventDefault(); beginFiles(event.dataTransfer.files); }} onClick={() => fileInput.current?.click()} role="button" tabIndex={0} onKeyDown={event => event.key === "Enter" && fileInput.current?.click()}><input className="hidden-input" ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp,image/avif" multiple onChange={(event: ChangeEvent<HTMLInputElement>) => event.target.files && beginFiles(event.target.files)} /><CloudUpload size={40} strokeWidth={1.25} /><strong>Drop images into your unorganised inbox</strong><span>or click to <em>browse files</em></span><div className="upload-capabilities"><span><Check size={15} /> Original Quality</span><span><RefreshCw size={15} /> Safe Retry</span><span><Sparkles size={15} /> Automatic Gemini check</span></div></div>
+        <div className="drop-zone" onDragOver={event => event.preventDefault()} onDrop={(event: DragEvent) => { event.preventDefault(); beginFiles(event.dataTransfer.files); }} onClick={() => fileInput.current?.click()} role="button" tabIndex={0} onKeyDown={event => event.key === "Enter" && fileInput.current?.click()}><input className="hidden-input" ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp,image/avif" multiple onChange={(event: ChangeEvent<HTMLInputElement>) => event.target.files && beginFiles(event.target.files)} /><CloudUpload size={40} strokeWidth={1.25} /><strong>Drop images into your unorganised inbox</strong><span>or click to <em>browse files</em></span><div className="upload-capabilities"><span><Check size={15} /> Fast delivery</span><span><RefreshCw size={15} /> Safe Retry</span><span><Sparkles size={15} /> Automatic Gemini check</span></div></div>
         <Queue queue={queue} onRetry={upload} onCancel={id => xhrs.current[id]?.abort()} onRemove={removeQueueItem} onClear={() => setQueue(current => current.filter(item => !isCompletedUploadQueueItem(item.status)))} />
         <AiReview images={images} albums={customAlbums} onApprove={(imageId, name, description, assignAlbum) => void approveJewellerySuggestion.mutateAsync({ imageId, name, description, assignAlbum }).then(() => utils.gallery.publicDashboard.invalidate())} onDismiss={imageId => void dismissJewellerySuggestion.mutateAsync({ imageId }).then(() => utils.gallery.publicDashboard.invalidate())} onApproveAll={applyReadyBatch} saving={approveJewellerySuggestion.isPending || dismissJewellerySuggestion.isPending} batchSaving={approveJewelleryBatch.isPending} />
         <section className="library-section"><div className="uncategorized-heading"><div><h2>Unorganised <span>{libraryImages.length}</span></h2><p>Images stay here until you put them into a custom album. Gemini never starts or moves an image by itself.</p></div><div className="image-tools"><button onClick={() => setSelected(selected.length === libraryImages.length ? [] : libraryImages.map(image => image.recordId))}>Select all</button><button className={grid ? "is-active" : ""} onClick={() => setGrid(true)}><Grid2X2 size={16} /></button><button className={!grid ? "is-active" : ""} onClick={() => setGrid(false)}><LayoutList size={16} /></button><button onClick={() => setSortNewest(current => !current)}>Sort: {sortNewest ? "Newest" : "Name"} <ArrowDownUp size={14} /></button></div></div><SmartBar smartAlbums={smartAlbums} />{isLoading ? <AdminImageGridSkeleton /> : libraryImages.length ? <ImageGrid images={libraryImages} selected={selected} onToggle={id => setSelected(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id])} list={grid ? false : true} /> : <div className="admin-empty-state"><ImageIcon size={23} /><h2>Everything is organized.</h2><p>New uploads stay here until you decide what belongs in an album.</p></div>}</section>
@@ -192,7 +247,7 @@ export default function Admin() {
   </main><nav className="admin-bottom-nav">{nav.map(item => <button key={item.key} className={tab === item.key ? "is-active" : ""} onClick={() => setTab(item.key)}><item.icon size={19} /><span>{item.label}</span></button>)}</nav></div>{editor && <AlbumEditor draft={editor} coverImages={editor.id ? albumImages(editor.id) : []} onChange={setEditor} onClose={() => setEditor(null)} onSave={() => void saveAlbum()} saving={createAlbum.isPending || updateAlbum.isPending} />}</div>;
 }
 
-function Queue({ queue, onRetry, onCancel, onRemove, onClear }: { queue: QueueItem[]; onRetry: (item: QueueItem) => Promise<void>; onCancel: (id: string) => void; onRemove: (id: string) => void; onClear: () => void }) { const completedCount = queue.filter(item => isCompletedUploadQueueItem(item.status)).length; return <section className="upload-queue"><div className="queue-heading"><h2>Upload activity <span>{queue.length}</span></h2><button onClick={onClear} disabled={completedCount === 0}>Clear completed</button></div>{queue.length === 0 ? <div className="queue-empty">Uploads and their status will appear here.</div> : <div className="queue-list">{queue.map(item => <div className="queue-row" key={item.id}><div className="queue-thumb">{item.preview ? <img src={item.preview} alt="" /> : <ImageIcon size={18} />}</div><div className="queue-file"><b>{item.file.name}</b><span>{(item.file.size / (1024 * 1024)).toFixed(1)} MB</span><div className="progress-track"><i style={{ width: `${item.progress}%` }} /></div>{item.error && <small className={item.status === "failed" ? "status-error" : "status-note"}>{item.error}</small>}</div><div className="queue-status">{item.status === "complete" ? <><span>Ready</span><Check className="status-success" size={16} /></> : item.status === "stored" ? <><span>Stored</span><Check className="status-success" size={16} /></> : item.status === "failed" ? <button onClick={() => void onRetry(item)}><RefreshCw size={15} /> Retry</button> : item.status === "cancelled" ? <span className="queue-cancelled-actions"><button onClick={() => void onRetry(item)}><RefreshCw size={15} /> Retry</button>{canRemoveUploadQueueItem(item.status) && <button className="queue-clear-action" onClick={() => onRemove(item.id)}><X size={15} /> Clear</button>}</span> : <><span>{item.status === "indexing" ? "Indexing" : item.status === "checking" ? "Checking" : `${item.progress}%`}</span><button onClick={() => onCancel(item.id)} aria-label="Cancel upload"><X size={15} /></button></>}</div></div>)}</div>}</section>; }
+function Queue({ queue, onRetry, onCancel, onRemove, onClear }: { queue: QueueItem[]; onRetry: (item: QueueItem) => Promise<void>; onCancel: (id: string) => void; onRemove: (id: string) => void; onClear: () => void }) { const completedCount = queue.filter(item => isCompletedUploadQueueItem(item.status)).length; return <section className="upload-queue"><div className="queue-heading"><h2>Upload activity <span>{queue.length}</span></h2><button onClick={onClear} disabled={completedCount === 0}>Clear completed</button></div>{queue.length === 0 ? <div className="queue-empty">Uploads and their status will appear here.</div> : <div className="queue-list">{queue.map(item => { const retry = canRetryUploadQueueItem(item.status) ? <button className="queue-retry-button" onClick={() => void onRetry(item)}><RefreshCw size={15} /> Retry upload</button> : null; return <div className="queue-row" key={item.id}><div className="queue-thumb">{item.preview ? <img src={item.preview} alt="" decoding="async" /> : <ImageIcon size={18} />}</div><div className="queue-file"><b>{item.file.name}</b><span>{(item.file.size / (1024 * 1024)).toFixed(1)} MB</span><div className="progress-track"><i style={{ width: `${item.progress}%` }} /></div>{item.error && <small className={item.status === "failed" ? "status-error" : "status-note"}>{item.error}</small>}</div><div className="queue-status">{item.status === "complete" ? <><span>Ready</span><Check className="status-success" size={16} /></> : item.status === "stored" ? <><span>Stored</span><Check className="status-success" size={16} /></> : item.status === "failed" ? retry : item.status === "cancelled" ? <span className="queue-cancelled-actions">{retry}{canRemoveUploadQueueItem(item.status) && <button className="queue-clear-action" onClick={() => onRemove(item.id)}><X size={15} /> Clear</button>}</span> : <><span>{item.status === "indexing" ? "Indexing" : item.status === "checking" ? "Checking" : `${item.progress}%`}</span><button onClick={() => onCancel(item.id)} aria-label="Cancel upload"><X size={15} /></button></>}</div></div>; })}</div>}</section>; }
 
 function SmartBar({ smartAlbums }: { smartAlbums: ReturnType<typeof usePersistedGallery>["smartAlbums"] }) { return <div className="smart-library-bar">{smartAlbums.map(view => <span key={view.id}><Sparkles size={13} /> {view.name}: {view.imageCount}</span>)}</div>; }
 
@@ -211,10 +266,10 @@ function AiReviewCard({ image, albums, onApprove, onDismiss, saving }: { image: 
   const existingAlbum = albums.find(album => album.id === image.aiSuggestedAlbumId);
   const albumLabel = existingAlbum ? existingAlbum.name : image.aiSuggestedNewAlbum ? `Create ${image.aiSuggestedNewAlbum}` : "Keep unassigned";
   const canAssign = Boolean(existingAlbum || image.aiSuggestedNewAlbum);
-  return <article className="ai-review-card"><img src={image.src} alt={name} /><div className="ai-review-copy"><div className="ai-review-label"><Sparkles size={14} /><span>AI suggestion</span></div>{editing ? <div className="ai-review-edit"><input aria-label="Suggested jewellery name" value={name} onChange={event => setName(event.target.value)} /><input aria-label="Suggested jewellery description" value={description} onChange={event => setDescription(event.target.value)} /></div> : <><b>{name}</b><p>{description}</p></>}<div className="ai-album-suggestion"><Album size={14} /><span>{albumLabel}</span></div><div className="ai-review-actions"><button className="dark-button" disabled={saving} onClick={() => onApprove(image.recordId, name, description, canAssign)}>{saving ? "Saving…" : "Approve"}</button><button className="secondary-button" onClick={() => setEditing(current => !current)}>{editing ? "Done" : "Edit"}</button><button className="ai-keep-button" disabled={saving} onClick={() => onApprove(image.recordId, name, description, false)}>Keep unassigned</button></div></div></article>;
+  return <article className="ai-review-card"><img src={image.thumbnailSrc} alt={name} decoding="async" fetchPriority="high" /><div className="ai-review-copy"><div className="ai-review-label"><Sparkles size={14} /><span>AI suggestion</span></div>{editing ? <div className="ai-review-edit"><input aria-label="Suggested jewellery name" value={name} onChange={event => setName(event.target.value)} /><input aria-label="Suggested jewellery description" value={description} onChange={event => setDescription(event.target.value)} /></div> : <><b>{name}</b><p>{description}</p></>}<div className="ai-album-suggestion"><Album size={14} /><span>{albumLabel}</span></div><div className="ai-review-actions"><button className="dark-button" disabled={saving} onClick={() => onApprove(image.recordId, name, description, canAssign)}>{saving ? "Saving…" : "Approve"}</button><button className="secondary-button" onClick={() => setEditing(current => !current)}>{editing ? "Done" : "Edit"}</button><button className="ai-keep-button" disabled={saving} onClick={() => onApprove(image.recordId, name, description, false)}>Keep unassigned</button></div></div></article>;
 }
 
-function ImageGrid({ images, selected, onToggle, list }: { images: PersistedGalleryImage[]; selected: number[]; onToggle: (id: number) => void; list: boolean }) { return <div className={list ? "uncategorized-list" : "uncategorized-grid"}>{images.map(image => <button className="admin-image-card" key={image.id} onClick={() => onToggle(image.recordId)}><div className="admin-image-frame"><img src={image.src} alt={image.alt} loading="lazy" /><i className={selected.includes(image.recordId) ? "select-box selected" : "select-box"}>{selected.includes(image.recordId) && <Check size={12} />}</i><span className={`smart-tag ${image.smartGroup}`}>{image.smartGroup}</span></div><div><b>{image.title}</b><span>{image.width ? `${image.width} × ${image.height}` : "Uploaded image"}</span>{image.aiStatus === "ready" && image.aiDescription && <p className="ai-image-description">{image.aiDescription}</p>}</div></button>)}</div>; }
+function ImageGrid({ images, selected, onToggle, list }: { images: PersistedGalleryImage[]; selected: number[]; onToggle: (id: number) => void; list: boolean }) { return <div className={list ? "uncategorized-list" : "uncategorized-grid"}>{images.map((image, index) => <button className="admin-image-card" key={image.id} onClick={() => onToggle(image.recordId)}><div className="admin-image-frame"><img src={image.thumbnailSrc} alt={image.alt} decoding="async" {...imageLoadAttributes(index)} /><i className={selected.includes(image.recordId) ? "select-box selected" : "select-box"}>{selected.includes(image.recordId) && <Check size={12} />}</i><span className={`smart-tag ${image.smartGroup}`}>{image.smartGroup}</span></div><div><b>{image.title}</b><span>{image.width ? `${image.width} × ${image.height}` : "Uploaded image"}</span>{image.aiStatus === "ready" && image.aiDescription && <p className="ai-image-description">{image.aiDescription}</p>}</div></button>)}</div>; }
 
 function AlbumEditor({ draft, coverImages, onChange, onClose, onSave, saving }: { draft: AlbumDraft; coverImages: PersistedGalleryImage[]; onChange: React.Dispatch<React.SetStateAction<AlbumDraft | null>>; onClose: () => void; onSave: () => void; saving: boolean }) {
   const patch = (value: Partial<AlbumDraft>) => onChange(current => current ? { ...current, ...value } : current);

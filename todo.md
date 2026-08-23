@@ -116,3 +116,12 @@
 - [x] Keep automatic results as editable review suggestions and never auto-create or move albums.
 - [x] Update Studio wording and settings to explain the automatic new-upload workflow clearly.
 - [x] Verify a real new upload receives an automatic correct jewellery suggestion while remaining unorganised until approval.
+- [x] Provide a reliable retry action for failed uploads, including clear recovery feedback and retry-safe queue state.
+- [x] Treat user-created jewellery album names as explicit matching rules that Gemini prioritizes when making one album suggestion.
+- [x] Improve gallery image loading with responsive source delivery, decoding priority, preloading, and fewer blocking renders.
+- [x] Refine the mobile Library selection bar so actions remain legible and do not crowd or overflow.
+- [x] Refine mobile Albums cards into compact, aligned rows with readable covers, metadata, and unobtrusive controls.
+- [x] Tighten the mobile Presentation settings hierarchy and automatic-Gemini toggle treatment to reduce empty space and improve scanability.
+- [x] Verify retry recovery, album-guided automatic suggestions, image loading, and all revised mobile Studio views live.
+- [x] Add responsive gallery image delivery so compact tiles do not always download original-resolution media.
+- [x] Verify the final public Home, Albums, and album-detail loading policy live after responsive delivery is in place.

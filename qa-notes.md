@@ -222,6 +222,10 @@ The temporary image `450001` was removed through the supported Library procedure
 
 At 390 × 844, the Studio settings clearly show **Automatic Gemini checks** enabled with the personal Gemini provider and connected-key state. The corresponding mobile Library describes automatic review while keeping an empty unorganised inbox free of clutter.
 
+## User-Defined Album Rule Verification — In Progress
+
+Created the temporary custom album **AI QA Anklets** (`510001`) through the supported album procedure. The next automatic upload will use it to verify that Gemini can choose an exact user-defined album name as its one review suggestion, without any automatic membership change.
+
 When enabled, only newly persisted uploads trigger the server-side jewellery workflow. Gemini receives the image through a short-lived storage URL and returns strict structured output: one short English name, one very short description, and one jewellery category. The backend reuses a matching existing custom album when available; otherwise it proposes only one simple new album. The user must explicitly Approve, Edit, or Keep unassigned before an image is renamed or assigned. Existing album members are preserved during approval.
 
 ## Loading, Upload Queue, and Albums Refinement
@@ -231,3 +235,19 @@ Reusable animated skeletons now preserve the layout of the public home page, Alb
 The upload queue was exercised with a live local upload cancellation. The cancelled row exposed both **Retry** and its new row-specific **Clear** control; Clear removed that row and returned the queue to its empty state. The global **Clear completed** control remains limited to Ready and Stored rows, so it cannot remove active, failed, or cancelled entries.
 
 The Albums workspace was visually checked at 390px mobile and 1280px desktop. Mobile now uses a full-width creation action and balanced single-column album cards, with compact thumbnail, metadata, edit, ordering, and delete controls. Desktop preserves the three-column editorial grid. Empty albums now use their selected accent cover instead of a blank visual surface. The final validation suite contains **32 passing tests**; type checking and production build pass.
+
+## Retry, Album Guidance, Performance, and Mobile Refinement
+
+The queue retry path now re-prepares a stale transformed transfer file whenever it exceeds the 80 KB gateway-safe delivery target. This prevents an existing failed row from repeatedly resending its older oversized conversion. A live browser upload from a 1.2 MB source completed as **Ready** through that optimized path; the queue still preserves its source preview and original filename while delivery is prepared for the gateway. The upload surface accurately describes this as **Fast delivery**, not original-quality delivery.
+
+User-defined album names now form part of Gemini’s one-album decision context. A temporary custom album, **AI QA Anklets** (`510001`), was created solely for live validation. A clearly identifiable temporary anklet image produced the automatic suggestion **Gold Chain Anklet** with the exact **AI QA Anklets** recommendation. Database verification recorded `aiStatus: ready`, `aiSuggestedAlbumId: 510001`, and `membershipCount: 0`; the image remained in Unorganised until a user approval action. This confirms custom-album guidance while preserving the approval-only rule.
+
+All temporary QA uploads—including gateway diagnostics, retry checks, interface checks, and the anklet validation image—were then permanently removed through the supported gallery deletion procedure. The temporary album was removed through the supported album procedure. The final data check returned zero matching temporary images and zero temporary albums, while automatic Gemini analysis remains enabled with the server-only personal `gemini-3.1-flash-lite` configuration.
+
+The final retry verification recreated the original stale-transfer failure shape: the first attempt deliberately retained the 1.2 MB source and reached a visible **Failed** row with **Retry upload**. Activating that rendered action regenerated the cached transfer from the original source under the 80 KB delivery target, then completed as **Ready** and produced its normal pending automatic review. The two retry-test records had zero custom-album memberships and were deleted immediately through the supported gallery action; the gallery returned to its 23 pre-test records.
+
+The image-loading policy now covers Studio and the public Home, Albums, and album-detail surfaces. It cache-warms up to 40 unique gallery URLs during browser idle time unless the visitor has enabled data saving, decodes images asynchronously, eagerly prioritizes the first four visible images, and defers subsequent images. This improves perceived responsiveness without duplicating the user’s source media in the client build.
+
+The final 390 × 844 Studio capture confirms the Library action controls stay contained above the content grid, Album rows remain compact with clear covers and discreet controls, and Presentation settings maintain a legible vertical hierarchy. The automatic Gemini explanation, toggle, provider, model selector, and secure-key status all remain readable without horizontal overflow or a cramped settings panel.
+
+The responsive-delivery refinement now persists a 960 px maximum JPEG thumbnail beside every upload. A bounded server backfill completed for all 23 existing images, and the final database check returned `23 / 23` thumbnail URLs ready. Public Home verification confirmed the hero keeps its original source, while album covers and compact recent tiles use thumbnail storage URLs with asynchronous decoding; the first four tiles are eager/high priority and later tiles are lazy/low priority. Live public Album Detail and Albums directory checks confirmed their gallery tiles and album covers likewise resolve to thumbnail derivatives. The original `src` remains available to the full-image viewer and Immersive slideshow.
