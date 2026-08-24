@@ -8,6 +8,6 @@ describe("Movement brand configuration", () => {
 
   it("provides the approved product tagline and deployable mark asset", () => {
     expect(brand.tagline).toBe("Your moments, in motion.");
-    expect(brand.markUrl).toMatch(/^\/manus-storage\/movement-mark-reference_/);
+    expect(brand.markUrl).toBe("/brand/movement-mark");
   });
 });

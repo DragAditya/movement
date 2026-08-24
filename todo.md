@@ -154,3 +154,15 @@
 - [x] Create the requested public GitHub repository named movement and publish the complete verified project.
 - [x] Add an easy-language README covering Movement, local setup, environment variables, and Vercel deployment.
 - [x] Verify the remote repository contents and document the published repository link.
+- [x] Assess Vercel compatibility, access, and required provider replacements for the full Movement stack.
+- [x] Connect the public Movement repository to Vercel without exposing secrets or weakening upload, database, OAuth, or AI security.
+- [x] Verify the Vercel project status and document any remaining required service configuration.
+- [x] Replace Manus-only service dependencies with TiDB Cloud and Backblaze B2 integrations suitable for Vercel.
+- [x] Preserve the public Movement interface and migrate existing gallery metadata and image media without data loss.
+- [ ] Configure Vercel environment variables and deploy a fully functional production version from the linked repository.
+- [ ] Validate Vercel uploads, albums, image delivery, duplicate review, and approval-only Gemini behavior end to end.
+- [x] Replace the failed TiDB connection with the user-requested DragAdi database and validate a fresh TLS connection before migration.
+- [x] Replace the remaining Manus-hosted Movement mark with a provider-neutral route backed by Backblaze on Vercel and the existing route on Manus.
+- [x] Implement and test a Vercel-safe direct-to-Backblaze upload path that avoids function request-size limitations while preserving duplicate and Gemini review behavior.
+- [ ] Verify Vercel routing, build output, TiDB access, Backblaze image delivery, and the public no-login Studio runtime before publishing.
+- [ ] Push the migration commit, verify the production deployment, and document TiDB/Backblaze setup without exposing any credential values.

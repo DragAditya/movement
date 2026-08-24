@@ -1,17 +1,40 @@
 import { and, asc, desc, eq, inArray, isNull, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
+import mysql from "mysql2";
 import { aiSettings, albumImages, albums, duplicateReviewCandidates, galleryImages, InsertUser, users } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { isMutableAlbum } from "./albumRules";
 import { isDuplicateReviewBulkDecisionAllowed, isDuplicateReviewDecisionAllowed, isInSimilarReviewScope, type DuplicateReviewDecision } from "./duplicateReviewPolicy";
 
 let _db: ReturnType<typeof drizzle> | null = null;
+const useExternalTiDb = process.env.MOVEMENT_DATABASE_PROVIDER === "tidb"
+  || Boolean(process.env.VERCEL && process.env.TIDB_DATABASE_URL);
+const databaseUrl = useExternalTiDb
+  ? process.env.TIDB_DATABASE_URL
+  : process.env.DATABASE_URL;
+
+function createSecureDatabaseClient(connectionString: string) {
+  if (!useExternalTiDb) return drizzle(connectionString);
+
+  const url = new URL(connectionString);
+  const pool = mysql.createPool({
+    host: url.hostname,
+    port: Number(url.port || 4000),
+    user: decodeURIComponent(url.username),
+    password: decodeURIComponent(url.password),
+    database: decodeURIComponent(url.pathname.replace(/^\//, "")),
+    ssl: { rejectUnauthorized: true },
+    waitForConnections: true,
+    connectionLimit: 5,
+  });
+  return drizzle({ client: pool });
+}
 
 // Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
-  if (!_db && process.env.DATABASE_URL) {
+  if (!_db && databaseUrl) {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
+      _db = createSecureDatabaseClient(databaseUrl);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;

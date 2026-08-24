@@ -12,7 +12,8 @@ import { Activity, Album, ArrowDownUp, Check, ChevronDown, ChevronUp, CloudUploa
 import { ChangeEvent, DragEvent, useEffect, useMemo, useRef, useState } from "react";
 
 type QueueStatus = UploadQueueStatus;
-type QueueItem = { id: string; file: File; transferFile?: File; preview: string; progress: number; status: QueueStatus; error?: string; optimized?: boolean; reviewId?: number };
+type DirectUploadTarget = { key: string; url: string; filename: string; mimeType: string; fileSize: number; width?: number; height?: number };
+type QueueItem = { id: string; file: File; transferFile?: File; directTarget?: DirectUploadTarget; preview: string; progress: number; status: QueueStatus; error?: string; optimized?: boolean; reviewId?: number };
 type PendingDuplicateReview = { id: number; matchKind: "exact" | "similar"; matchedImageId: number; distance: number; similarity: number; originalUrl: string; thumbnailUrl: string | null; previewUrl: string | null; filename: string; mimeType: string; fileSize: number; width: number | null; height: number | null; createdAt: Date; existing: { id: number | null; filename: string | null; originalUrl: string | null; thumbnailUrl: string | null; previewUrl: string | null; width: number | null; height: number | null; createdAt: Date | null } };
 type Tab = "library" | "albums" | "presentation" | "activity";
 type AlbumDraft = { id?: number; name: string; description: string; visibility: "public" | "private"; presentationMode: "standard" | "immersive" | "kiosk"; accent: string; coverImageId: string; imageIds: number[] };
@@ -155,6 +156,37 @@ export default function Admin() {
     }
   };
 
+  const applyUploadResult = (item: QueueItem, status: number, payload: UploadResponsePayload) => {
+    const resolution = resolveUploadResponse(status, payload);
+    if (resolution === "review") {
+      updateQueue(item.id, { status: "duplicate", progress: 100, reviewId: payload.reviewId, error: "Saved to Needs Review. It has not been added to your library." });
+      addActivity("Duplicate queued for review", `${item.file.name} is safely waiting in Needs Review`);
+      void utils.gallery.pendingDuplicateReviews.invalidate();
+    } else if (resolution === "complete") {
+      updateQueue(item.id, { status: "complete", progress: 100 });
+      addActivity(payload.replaced ? "Image replaced" : "Image uploaded", payload.replaced ? `${item.file.name} replaced the reviewed existing image` : `${item.file.name} was added to your library`);
+      void utils.gallery.publicDashboard.invalidate();
+    } else if (resolution === "reconcile" && payload.key && payload.url && payload.filename && payload.mimeType && payload.fileSize) {
+      void reconcileStored(item, { key: payload.key, url: payload.url, thumbnailUrl: payload.thumbnailUrl, previewUrl: payload.previewUrl, filename: payload.filename, mimeType: payload.mimeType, fileSize: payload.fileSize, contentHash: payload.contentHash, visualHash: payload.visualHash, width: payload.width, height: payload.height });
+    } else if (resolution === "stored") {
+      updateQueue(item.id, { status: "stored", progress: 100, error: "Image stored safely and awaiting library indexing." });
+    } else {
+      updateQueue(item.id, { status: "failed", error: payload.error ?? "Upload could not be completed. Please retry." });
+    }
+  };
+
+  const putDirectlyToStorage = (item: QueueItem, uploadUrl: string, transferFile: File) => new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhrs.current[item.id] = xhr;
+    xhr.open("PUT", uploadUrl);
+    xhr.setRequestHeader("content-type", transferFile.type);
+    xhr.upload.onprogress = event => { if (event.lengthComputable) updateQueue(item.id, { progress: Math.round((event.loaded / event.total) * 86) }); };
+    xhr.onload = () => { delete xhrs.current[item.id]; xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error("Direct storage upload was rejected")); };
+    xhr.onerror = () => { delete xhrs.current[item.id]; reject(new Error("Direct storage upload did not complete")); };
+    xhr.onabort = () => { delete xhrs.current[item.id]; reject(new DOMException("Upload cancelled", "AbortError")); };
+    xhr.send(transferFile);
+  });
+
   const upload = async (item: QueueItem) => {
     let transferFile = item.transferFile;
     let optimized = item.optimized ?? false;
@@ -170,6 +202,36 @@ export default function Admin() {
     }
     const dimensions = await getDimensions(transferFile);
     updateQueue(item.id, { status: "uploading", progress: 1, error: undefined });
+    if (item.directTarget) {
+      try {
+        updateQueue(item.id, { status: "indexing", progress: 90, error: undefined });
+        const response = await fetch("/api/upload/process", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(item.directTarget) });
+        applyUploadResult(item, response.status, await response.json() as UploadResponsePayload);
+      } catch {
+        updateQueue(item.id, { status: "failed", error: "Your image is stored safely. Retry to finish library processing." });
+      }
+      return;
+    }
+    try {
+      const initResponse = await fetch("/api/upload/presign", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ filename: transferFile.name, mimeType: transferFile.type, fileSize: transferFile.size, width: dimensions.width, height: dimensions.height }) });
+      const init = await initResponse.json() as ({ direct?: boolean; uploadUrl?: string } & Partial<DirectUploadTarget> & { error?: string });
+      if (!initResponse.ok) throw new Error(init.error ?? "Upload could not be prepared.");
+      if (init.direct && init.uploadUrl && init.key && init.url && init.filename && init.mimeType && init.fileSize) {
+        await putDirectlyToStorage(item, init.uploadUrl, transferFile);
+        const directTarget: DirectUploadTarget = { key: init.key, url: init.url, filename: init.filename, mimeType: init.mimeType, fileSize: init.fileSize, width: init.width, height: init.height };
+        updateQueue(item.id, { directTarget, status: "indexing", progress: 90, error: undefined });
+        const response = await fetch("/api/upload/process", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(directTarget) });
+        applyUploadResult(item, response.status, await response.json() as UploadResponsePayload);
+        return;
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        updateQueue(item.id, { status: "cancelled", error: "Upload cancelled before confirmation." });
+      } else {
+        updateQueue(item.id, { status: "failed", error: error instanceof Error ? error.message : "Upload could not be prepared. Please retry." });
+      }
+      return;
+    }
     const xhr = new XMLHttpRequest(); xhrs.current[item.id] = xhr;
     xhr.open("POST", "/api/upload"); xhr.setRequestHeader("content-type", transferFile.type); xhr.setRequestHeader("x-file-name", encodeURIComponent(transferFile.name)); xhr.setRequestHeader("x-image-width", String(dimensions.width)); xhr.setRequestHeader("x-image-height", String(dimensions.height));
     xhr.upload.onprogress = event => { if (event.lengthComputable) updateQueue(item.id, { progress: Math.round((event.loaded / event.total) * 100) }); };
@@ -177,20 +239,7 @@ export default function Admin() {
       delete xhrs.current[item.id];
       let payload: UploadResponsePayload = {};
       try { payload = JSON.parse(xhr.responseText); } catch { /* handled as request error below */ }
-      const resolution = resolveUploadResponse(xhr.status, payload);
-      if (resolution !== "failed") {
-        if (resolution === "review") {
-          updateQueue(item.id, { status: "duplicate", progress: 100, reviewId: payload.reviewId, error: "Saved to Needs Review. It has not been added to your library." });
-          addActivity("Duplicate queued for review", `${item.file.name} is safely waiting in Needs Review`);
-          void utils.gallery.pendingDuplicateReviews.invalidate();
-        } else if (resolution === "complete") {
-          updateQueue(item.id, { status: "complete", progress: 100 });
-          addActivity(payload.replaced ? "Image replaced" : "Image uploaded", payload.replaced ? `${item.file.name} replaced the reviewed existing image` : `${item.file.name} was added to your library`);
-          utils.gallery.publicDashboard.invalidate();
-        } else if (resolution === "reconcile" && payload.key && payload.url && payload.filename && payload.mimeType && payload.fileSize) {
-          void reconcileStored(item, { key: payload.key, url: payload.url, thumbnailUrl: payload.thumbnailUrl, previewUrl: payload.previewUrl, filename: payload.filename, mimeType: payload.mimeType, fileSize: payload.fileSize, contentHash: payload.contentHash, visualHash: payload.visualHash, width: payload.width, height: payload.height });
-        } else updateQueue(item.id, { status: "stored", progress: 100, error: "Image stored safely and awaiting library indexing." });
-      } else updateQueue(item.id, { status: "failed", error: payload.error ?? "Upload could not be completed. Please retry." });
+      applyUploadResult(item, xhr.status, payload);
     };
     xhr.onerror = () => { delete xhrs.current[item.id]; updateQueue(item.id, { status: resolveInterruptedUpload(), error: "Connection ended while confirming the upload. Refresh the library or retry to confirm its status." }); utils.gallery.publicDashboard.invalidate(); };
     xhr.onabort = () => { delete xhrs.current[item.id]; updateQueue(item.id, { status: "cancelled", error: "Upload cancelled before confirmation." }); };

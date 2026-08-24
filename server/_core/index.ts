@@ -8,14 +8,56 @@ import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
-import { storageGetSignedUrl, storagePut } from "../storage";
+import { isExternalObjectStorageEnabled, storageCreateDirectUploadUrl, storageGet, storageGetSignedUrl, storagePut } from "../storage";
 import { nanoid } from "nanoid";
 import { createDuplicateReviewCandidate, createGalleryImage, listGalleryDuplicateCandidates, listGalleryImagesMissingFingerprints, listGalleryImagesMissingPreviews, listGalleryImagesMissingThumbnails, saveGalleryFingerprints, saveGalleryPreview, saveGalleryThumbnail } from "../db";
 import { contentHash, findDuplicateMatch, visualHash } from "../duplicateImage";
 import { runNewJewelleryAnalysis } from "../jewelleryAi";
 import sharp from "sharp";
+import { createStagedUploadKey, isStagedUploadKey, isSupportedImageMimeType, normalizeUploadFilename, supportedImageMimeTypes } from "../externalUpload";
 
 const thumbnailMaxSide = 960;
+const maxUploadBytes = 50 * 1024 * 1024;
+
+type UploadedImageDetails = {
+  source: Buffer;
+  filename: string;
+  mimeType: string;
+  width?: number;
+  height?: number;
+  stored?: { key: string; url: string };
+};
+
+async function persistUploadedImage({ source, filename, mimeType, width, height, stored: existingStored }: UploadedImageDetails) {
+  const fingerprints = { contentHash: contentHash(source), visualHash: await visualHash(source) };
+  const duplicate = findDuplicateMatch(fingerprints, await listGalleryDuplicateCandidates());
+  const stored = existingStored ?? await storagePut(`${duplicate ? "gallery/review-candidates/originals" : "gallery/originals"}/${nanoid()}-${filename}`, source, mimeType);
+  let thumbnailUrl: string | undefined;
+  let previewUrl: string | undefined;
+  try {
+    thumbnailUrl = (await storeGalleryThumbnail(source, filename)).url;
+  } catch (thumbnailError) {
+    console.warn("[Upload] Original stored without a thumbnail", thumbnailError);
+  }
+  try {
+    previewUrl = (await storeGalleryPreview(source, filename)).url;
+  } catch (previewError) {
+    console.warn("[Upload] Original stored without a compact preview", previewError);
+  }
+  const values = { originalKey: stored.key, originalUrl: stored.url, thumbnailUrl, previewUrl, filename, mimeType, fileSize: source.length, width, height, ...fingerprints };
+  if (duplicate) {
+    const review = await createDuplicateReviewCandidate({ ...values, matchKind: duplicate.kind, matchedImageId: duplicate.image.id, distance: duplicate.distance, similarity: duplicate.similarity });
+    return { status: 202, payload: { key: stored.key, url: stored.url, thumbnailUrl, previewUrl, stored: true, reviewPending: true, reviewId: review.id, filename, mimeType, fileSize: source.length, width, height, contentHash: fingerprints.contentHash, visualHash: fingerprints.visualHash } };
+  }
+  try {
+    const image = await createGalleryImage(values);
+    const analysis = image ? await runNewJewelleryAnalysis(image.id) : undefined;
+    return { status: 201, payload: { key: stored.key, url: stored.url, thumbnailUrl, previewUrl, stored: true, persisted: true, imageId: image?.id, aiStatus: analysis?.status } };
+  } catch (indexError) {
+    console.error("[Upload] Image stored but record indexing failed", indexError);
+    return { status: 202, payload: { key: stored.key, url: stored.url, thumbnailUrl, previewUrl, stored: true, persisted: false, filename, mimeType, fileSize: source.length, contentHash: fingerprints.contentHash, visualHash: fingerprints.visualHash, width, height } };
+  }
+}
 
 async function storeGalleryThumbnail(source: Buffer, filename: string) {
   const thumbnail = await sharp(source, { failOn: "none", limitInputPixels: 64_000_000 })
@@ -96,53 +138,63 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
   throw new Error(`No available port found starting from ${startPort}`);
 }
 
-async function startServer() {
+export function createMovementApp() {
   const app = express();
-  const server = createServer(app);
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
-  app.post("/api/upload", express.raw({ type: ["image/jpeg", "image/png", "image/webp", "image/avif"], limit: "50mb" }), async (req, res) => {
+  app.post("/api/upload/presign", express.json({ limit: "1mb" }), async (req, res) => {
+    const body = req.body as { filename?: string; mimeType?: string; fileSize?: number; width?: number; height?: number };
+    if (!body.filename || !body.mimeType || !body.fileSize || !isSupportedImageMimeType(body.mimeType) || body.fileSize > maxUploadBytes || body.fileSize < 1) {
+      res.status(400).json({ error: "Use a supported JPEG, PNG, WebP, or AVIF image up to 50 MB." });
+      return;
+    }
+    if (!isExternalObjectStorageEnabled()) {
+      res.json({ direct: false });
+      return;
+    }
+    try {
+      const filename = normalizeUploadFilename(body.filename);
+      const upload = await storageCreateDirectUploadUrl(createStagedUploadKey(filename), body.mimeType);
+      res.status(201).json({ direct: true, uploadUrl: upload.url, key: upload.key, url: upload.mediaUrl, filename, mimeType: body.mimeType, fileSize: body.fileSize, width: Number(body.width) || undefined, height: Number(body.height) || undefined });
+    } catch (error) {
+      console.error("[Upload] Could not create direct storage upload", error);
+      res.status(503).json({ error: "Image storage is temporarily unavailable. Please retry." });
+    }
+  });
+  app.post("/api/upload/process", express.json({ limit: "1mb" }), async (req, res) => {
+    const body = req.body as { key?: string; filename?: string; mimeType?: string; fileSize?: number; width?: number; height?: number };
+    if (!body.key || !body.filename || !body.mimeType || !body.fileSize || !isStagedUploadKey(body.key) || !isSupportedImageMimeType(body.mimeType) || body.fileSize > maxUploadBytes || body.fileSize < 1) {
+      res.status(400).json({ error: "Stored image metadata is incomplete." });
+      return;
+    }
+    try {
+      const signedUrl = await storageGetSignedUrl(body.key);
+      const download = await fetch(signedUrl);
+      if (!download.ok) throw new Error(`Stored upload could not be downloaded (${download.status})`);
+      const source = Buffer.from(await download.arrayBuffer());
+      if (source.length !== body.fileSize || source.length > maxUploadBytes) throw new Error("Stored upload size does not match its upload request");
+      const stored = await storageGet(body.key);
+      const result = await persistUploadedImage({ source, stored, filename: normalizeUploadFilename(body.filename), mimeType: body.mimeType, width: Number(body.width) || undefined, height: Number(body.height) || undefined });
+      res.status(result.status).json(result.payload);
+    } catch (error) {
+      console.error("[Upload] Stored image processing failed", error);
+      res.status(503).json({ error: "Your image is stored safely. Retry to finish library processing." });
+    }
+  });
+  app.post("/api/upload", express.raw({ type: [...supportedImageMimeTypes], limit: "50mb" }), async (req, res) => {
     const contentType = req.headers["content-type"]?.split(";")[0] ?? "";
-    const acceptedTypes = ["image/jpeg", "image/png", "image/webp", "image/avif"];
-    if (!acceptedTypes.includes(contentType) || !Buffer.isBuffer(req.body) || req.body.length === 0) {
+    if (!isSupportedImageMimeType(contentType) || !Buffer.isBuffer(req.body) || req.body.length === 0) {
       res.status(400).json({ error: "Use a supported JPEG, PNG, WebP, or AVIF image." });
       return;
     }
     const rawName = typeof req.headers["x-file-name"] === "string" ? req.headers["x-file-name"] : "image";
-    const filename = decodeURIComponent(rawName).replace(/[^a-zA-Z0-9._-]/g, "-");
+    const filename = normalizeUploadFilename(rawName);
     const width = Number(req.headers["x-image-width"] ?? 0) || undefined;
     const height = Number(req.headers["x-image-height"] ?? 0) || undefined;
     try {
-      const fingerprints = { contentHash: contentHash(req.body), visualHash: await visualHash(req.body) };
-      const duplicate = findDuplicateMatch(fingerprints, await listGalleryDuplicateCandidates());
-      const stored = await storagePut(`${duplicate ? "gallery/review-candidates/originals" : "gallery/originals"}/${nanoid()}-${filename}`, req.body, contentType);
-      let thumbnailUrl: string | undefined;
-      let previewUrl: string | undefined;
-      try {
-        thumbnailUrl = (await storeGalleryThumbnail(req.body, filename)).url;
-      } catch (thumbnailError) {
-        console.warn("[Upload] Original stored without a thumbnail", thumbnailError);
-      }
-      try {
-        previewUrl = (await storeGalleryPreview(req.body, filename)).url;
-      } catch (previewError) {
-        console.warn("[Upload] Original stored without a compact preview", previewError);
-      }
-      try {
-        const values = { originalKey: stored.key, originalUrl: stored.url, thumbnailUrl, previewUrl, filename, mimeType: contentType, fileSize: req.body.length, width, height, ...fingerprints };
-        if (duplicate) {
-          const review = await createDuplicateReviewCandidate({ ...values, matchKind: duplicate.kind, matchedImageId: duplicate.image.id, distance: duplicate.distance, similarity: duplicate.similarity });
-          res.status(202).json({ key: stored.key, url: stored.url, thumbnailUrl, previewUrl, stored: true, reviewPending: true, reviewId: review.id, filename, mimeType: contentType, fileSize: req.body.length, width, height, contentHash: fingerprints.contentHash, visualHash: fingerprints.visualHash });
-          return;
-        }
-        const image = await createGalleryImage(values);
-        const analysis = image ? await runNewJewelleryAnalysis(image.id) : undefined;
-        res.status(201).json({ key: stored.key, url: stored.url, thumbnailUrl, previewUrl, stored: true, persisted: true, imageId: image?.id, aiStatus: analysis?.status });
-      } catch (indexError) {
-        console.error("[Upload] Image stored but record indexing failed", indexError);
-        res.status(202).json({ key: stored.key, url: stored.url, thumbnailUrl, previewUrl, stored: true, persisted: false, filename, mimeType: contentType, fileSize: req.body.length, contentHash: fingerprints.contentHash, visualHash: fingerprints.visualHash, width, height });
-      }
+      const result = await persistUploadedImage({ source: req.body, filename, mimeType: contentType, width, height });
+      res.status(result.status).json(result.payload);
     } catch (error) {
       console.error("[Upload] Failed before image storage completed", error);
       res.status(500).json({ error: "Image storage was unavailable. Please retry." });
@@ -164,7 +216,7 @@ async function startServer() {
     }
   });
   registerStorageProxy(app);
-  registerOAuthRoutes(app);
+  if (!process.env.VERCEL) registerOAuthRoutes(app);
   // tRPC API
   app.use(
     "/api/trpc",
@@ -173,6 +225,12 @@ async function startServer() {
       createContext,
     })
   );
+  return app;
+}
+
+async function startServer() {
+  const app = createMovementApp();
+  const server = createServer(app);
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);
@@ -194,4 +252,6 @@ async function startServer() {
   });
 }
 
-startServer().catch(console.error);
+if (!process.env.VERCEL) {
+  startServer().catch(console.error);
+}

@@ -1,7 +1,46 @@
 import type { Express } from "express";
 import { ENV } from "./env";
+import { isExternalObjectStorageEnabled, storageGetSignedUrl } from "../storage";
 
 export function registerStorageProxy(app: Express) {
+  app.get("/brand/movement-mark", async (_req, res) => {
+    if (!isExternalObjectStorageEnabled()) {
+      res.redirect(307, "/manus-storage/movement-mark-reference_54d95abd.png");
+      return;
+    }
+
+    try {
+      const url = await storageGetSignedUrl("branding/movement-mark.png");
+      res.set("Cache-Control", "private, max-age=300");
+      res.redirect(307, url);
+    } catch (error) {
+      console.error("[BrandStorageProxy] failed:", error);
+      res.status(502).send("Brand asset storage backend error");
+    }
+  });
+
+  app.get("/media/*", async (req, res) => {
+    if (!isExternalObjectStorageEnabled()) {
+      res.status(404).send("External media storage is not enabled");
+      return;
+    }
+
+    const key = (req.params as Record<string, string>)[0];
+    if (!key) {
+      res.status(400).send("Missing storage key");
+      return;
+    }
+
+    try {
+      const url = await storageGetSignedUrl(key);
+      res.set("Cache-Control", "private, max-age=300");
+      res.redirect(307, url);
+    } catch (error) {
+      console.error("[ExternalStorageProxy] failed:", error);
+      res.status(502).send("External storage backend error");
+    }
+  });
+
   app.get("/manus-storage/*", async (req, res) => {
     const key = (req.params as Record<string, string>)[0];
     if (!key) {

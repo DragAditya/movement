@@ -1,7 +1,8 @@
-// Preconfigured storage helpers for Manus WebDev templates
-// Uploads via Forge Server presigned URL to S3 (PUT direct).
-// Downloads return /manus-storage/{key} paths served via 307 redirect.
+// Storage helpers support the existing Manus Forge proxy by default and an
+// opt-in Backblaze B2 backend for external Vercel deployments.
 
+import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { ENV } from "./_core/env";
 
 function getForgeConfig() {
@@ -28,13 +29,55 @@ function appendHashSuffix(relKey: string): string {
   return `${relKey.slice(0, lastDot)}_${hash}${relKey.slice(lastDot)}`;
 }
 
+export function isExternalObjectStorageEnabled(): boolean {
+  return process.env.MOVEMENT_STORAGE_PROVIDER === "b2"
+    || Boolean(process.env.VERCEL && process.env.B2_S3_KEY_ID && process.env.B2_S3_APPLICATION_KEY);
+}
+
+function getB2Config() {
+  const accessKeyId = process.env.B2_S3_KEY_ID;
+  const secretAccessKey = process.env.B2_S3_APPLICATION_KEY;
+  const bucket = process.env.B2_S3_BUCKET ?? "movement-media-waghaditya";
+
+  if (!accessKeyId || !secretAccessKey) {
+    throw new Error("Backblaze B2 storage is not fully configured");
+  }
+
+  return { accessKeyId, secretAccessKey, bucket };
+}
+
+function getB2Client() {
+  const { accessKeyId, secretAccessKey } = getB2Config();
+  return new S3Client({
+    region: process.env.B2_S3_REGION ?? "us-east-005",
+    endpoint: process.env.B2_S3_ENDPOINT ?? "https://s3.us-east-005.backblazeb2.com",
+    credentials: { accessKeyId, secretAccessKey },
+  });
+}
+
+function externalMediaUrl(key: string): string {
+  return `/media/${key.split("/").map(encodeURIComponent).join("/")}`;
+}
+
 export async function storagePut(
   relKey: string,
   data: Buffer | Uint8Array | string,
   contentType = "application/octet-stream",
 ): Promise<{ key: string; url: string }> {
-  const { forgeUrl, forgeKey } = getForgeConfig();
   const key = appendHashSuffix(normalizeKey(relKey));
+
+  if (isExternalObjectStorageEnabled()) {
+    const { bucket } = getB2Config();
+    await getB2Client().send(new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: data,
+      ContentType: contentType,
+    }));
+    return { key, url: externalMediaUrl(key) };
+  }
+
+  const { forgeUrl, forgeKey } = getForgeConfig();
 
   // 1. Get presigned PUT URL from Forge
   const presignUrl = new URL("v1/storage/presign/put", forgeUrl + "/");
@@ -73,12 +116,19 @@ export async function storagePut(
 
 export async function storageGet(relKey: string): Promise<{ key: string; url: string }> {
   const key = normalizeKey(relKey);
+  if (isExternalObjectStorageEnabled()) return { key, url: externalMediaUrl(key) };
   return { key, url: `/manus-storage/${key}` };
 }
 
 export async function storageGetSignedUrl(relKey: string): Promise<string> {
-  const { forgeUrl, forgeKey } = getForgeConfig();
   const key = normalizeKey(relKey);
+
+  if (isExternalObjectStorageEnabled()) {
+    const { bucket } = getB2Config();
+    return getSignedUrl(getB2Client(), new GetObjectCommand({ Bucket: bucket, Key: key }), { expiresIn: 60 * 15 });
+  }
+
+  const { forgeUrl, forgeKey } = getForgeConfig();
 
   const getUrl = new URL("v1/storage/presign/get", forgeUrl + "/");
   getUrl.searchParams.set("path", key);
@@ -94,4 +144,25 @@ export async function storageGetSignedUrl(relKey: string): Promise<string> {
 
   const { url } = (await resp.json()) as { url: string };
   return url;
+}
+
+/**
+ * Creates a short-lived browser upload URL only when the external B2 adapter is
+ * active. The browser receives no storage credential and can upload only to the
+ * one generated staging key.
+ */
+export async function storageCreateDirectUploadUrl(relKey: string, contentType: string): Promise<{ key: string; url: string; mediaUrl: string }> {
+  if (!isExternalObjectStorageEnabled()) {
+    throw new Error("Direct browser uploads require external object storage");
+  }
+
+  const key = normalizeKey(relKey);
+  const { bucket } = getB2Config();
+  const url = await getSignedUrl(
+    getB2Client(),
+    new PutObjectCommand({ Bucket: bucket, Key: key, ContentType: contentType }),
+    { expiresIn: 60 * 15 },
+  );
+
+  return { key, url, mediaUrl: externalMediaUrl(key) };
 }
