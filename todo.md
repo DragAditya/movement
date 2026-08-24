@@ -165,4 +165,4 @@
 - [x] Replace the remaining Manus-hosted Movement mark with a provider-neutral route backed by Backblaze on Vercel and the existing route on Manus.
 - [x] Implement and test a Vercel-safe direct-to-Backblaze upload path that avoids function request-size limitations while preserving duplicate and Gemini review behavior.
 - [x] Verify Vercel routing, build output, TiDB access, Backblaze image delivery, and the public no-login Studio runtime before publishing.
-- [ ] Push the migration commit, verify the production deployment, and document TiDB/Backblaze setup without exposing any credential values.
+- [x] Push the migration commit, verify the production deployment, and document TiDB/Backblaze setup without exposing any credential values.
