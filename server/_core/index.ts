@@ -1,9 +1,5 @@
-import "dotenv/config";
 import express from "express";
-import { createServer } from "http";
-import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
-import { registerOAuthRoutes } from "./oauth";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
@@ -76,7 +72,7 @@ async function storeGalleryPreview(source: Buffer, filename: string) {
   return storagePut(`gallery/previews/${nanoid()}-${filename.replace(/\.[^/.]+$/, "")}.jpg`, preview, "image/jpeg");
 }
 
-async function backfillGalleryDerivatives() {
+export async function backfillGalleryDerivatives() {
   const missingThumbnails = await listGalleryImagesMissingThumbnails();
   for (const image of missingThumbnails) {
     try {
@@ -103,7 +99,7 @@ async function backfillGalleryDerivatives() {
   }
 }
 
-async function backfillGalleryFingerprints() {
+export async function backfillGalleryFingerprints() {
   const missing = await listGalleryImagesMissingFingerprints();
   for (const image of missing) {
     try {
@@ -116,25 +112,6 @@ async function backfillGalleryFingerprints() {
       console.warn(`[Duplicate checker] Could not fingerprint ${image.id}`, error);
     }
   }
-}
-
-function isPortAvailable(port: number): Promise<boolean> {
-  return new Promise(resolve => {
-    const server = net.createServer();
-    server.listen(port, () => {
-      server.close(() => resolve(true));
-    });
-    server.on("error", () => resolve(false));
-  });
-}
-
-async function findAvailablePort(startPort: number = 3000): Promise<number> {
-  for (let port = startPort; port < startPort + 20; port++) {
-    if (await isPortAvailable(port)) {
-      return port;
-    }
-  }
-  throw new Error(`No available port found starting from ${startPort}`);
 }
 
 export function createMovementApp() {
@@ -215,7 +192,6 @@ export function createMovementApp() {
     }
   });
   registerStorageProxy(app);
-  if (!process.env.VERCEL) registerOAuthRoutes(app);
   // tRPC API
   app.use(
     "/api/trpc",
@@ -225,34 +201,4 @@ export function createMovementApp() {
     })
   );
   return app;
-}
-
-async function startServer() {
-  const app = createMovementApp();
-  const server = createServer(app);
-  // development mode uses Vite, production mode uses static files
-  if (process.env.NODE_ENV === "development") {
-    const { setupVite } = await import("./vite");
-    await setupVite(app, server);
-  } else {
-    const { serveStatic } = await import("./vite");
-    serveStatic(app);
-  }
-
-  const preferredPort = parseInt(process.env.PORT || "3000");
-  const port = await findAvailablePort(preferredPort);
-
-  if (port !== preferredPort) {
-    console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
-  }
-
-  server.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}`);
-    void backfillGalleryDerivatives();
-    void backfillGalleryFingerprints();
-  });
-}
-
-if (!process.env.VERCEL) {
-  startServer().catch(console.error);
 }

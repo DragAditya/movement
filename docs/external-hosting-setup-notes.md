@@ -2,9 +2,13 @@
 
 ## Vercel
 
-The public GitHub repository is `DragAditya/movement`. The linked Vercel Hobby project is named `movement` in the `Aditya's projects` team and appears at `https://movement-tawny-gamma.vercel.app`. It currently has no production deployment. The authenticated Vercel dashboard is available at `https://vercel.com/adityas-projects-5ee85a73/movement`.
+The public GitHub repository is `DragAditya/movement`. The linked Vercel Hobby project is named `movement` in the `Aditya's projects` team and appears at `https://movement-tawny-gamma.vercel.app`. The authenticated Vercel dashboard is available at `https://vercel.com/adityas-projects-5ee85a73/movement`.
 
-Before the first production deployment, add these environment variables in the Vercel project settings for Production and Preview: `TIDB_DATABASE_URL`, `B2_S3_KEY_ID`, and `B2_S3_APPLICATION_KEY`. The application detects Vercel together with these variables and automatically uses TiDB and Backblaze B2 while Manus remains unchanged.
+Vercel now has `TIDB_DATABASE_URL`, `B2_S3_KEY_ID`, `B2_S3_APPLICATION_KEY`, and `GEMINI_API_KEY` in Production and Preview. The application detects Vercel together with the TiDB and Backblaze values and automatically uses TiDB and Backblaze B2 while Manus remains unchanged. The copied TiDB AI settings use the personal provider with automatic analysis enabled, preserving approval-only Gemini suggestions without relying on the Manus built-in provider.
+
+## Deployment Validation Notes
+
+The original TypeScript API entry deployed but failed during Vercel function initialization because Vercel separately type-checked the imported Express source graph. The repair uses a JavaScript `api/index.mjs` entry that imports a pure `dist/apiApp.js` bundle. The local Vite/bootstrap module is separately compiled only for Manus and local development, preventing Vite and Lightning CSS from entering the Vercel function graph. A local harness running the same `VERCEL=1` mode returned HTTP 200 from `gallery.publicDashboard`. The latest Git-linked production deployment is ready and awaiting final public-route validation.
 
 ## TiDB Cloud
 
