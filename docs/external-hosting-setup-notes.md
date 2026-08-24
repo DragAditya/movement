@@ -8,7 +8,17 @@ Vercel now has `TIDB_DATABASE_URL`, `B2_S3_KEY_ID`, `B2_S3_APPLICATION_KEY`, and
 
 ## Deployment Validation Notes
 
-The original TypeScript API entry deployed but failed during Vercel function initialization because Vercel separately type-checked the imported Express source graph. The repair uses a JavaScript `api/index.mjs` entry that imports a pure `dist/apiApp.js` bundle. The local Vite/bootstrap module is separately compiled only for Manus and local development, preventing Vite and Lightning CSS from entering the Vercel function graph. A local harness running the same `VERCEL=1` mode returned HTTP 200 from `gallery.publicDashboard`. The latest Git-linked production deployment is ready and awaiting final public-route validation.
+The original TypeScript API entry deployed but failed during Vercel function initialization because Vercel separately type-checked the imported Express source graph. An intermediate JavaScript wrapper still bundled local Vite dependencies and caused a missing `lightningcss.linux-x64-gnu.node` runtime error. The current repair uses a JavaScript `api/index.mjs` entry that imports a pure `dist/apiApp.js` bundle. The local Vite/bootstrap module is separately compiled only for Manus and local development, preventing Vite and Lightning CSS from entering the Vercel function graph. A local harness running the same `VERCEL=1` mode returned HTTP 200 from `gallery.publicDashboard`.
+
+The latest Git-linked production deployment (`dpl_5U6334cm7PeAi8xrbppe8qwPQxvC`) returned HTTP 200 from `gallery.publicDashboard` in Vercel and visibly rendered the copied public gallery: 17 images, four custom albums, thumbnail/previews delivered through `/media/*`, and the Movement mark delivered through `/brand/movement-mark`.
+
+The public `/manage` Studio route also loaded without an authentication prompt, showing the copied All Images count of 17, the persisted album workspace, the empty unorganised queue, and the empty durable duplicate-review queue. This preserves the requested no-login Studio behavior.
+
+The live `/api/upload/presign` route issued a direct-to-B2 request in Vercel with HTTP 201. A four-byte JPEG test uploaded from the Vercel browser origin to its signed Backblaze URL with HTTP 200, confirming the configured CORS rule. The isolated object was removed immediately afterwards; no gallery metadata or user media was changed during this verification.
+
+The public `/albums` route and a real deep-linked custom album route (`/albums/bangles-mt60lwvs`) both rendered correctly through Vercel’s SPA rewrite. The album detail displayed all five copied Bangle previews from the private Backblaze-backed `/media/*` route.
+
+The deployed `gallery.getAiProviderStatus` procedure returned HTTP 200 and only the safe `personalKeyConfigured: true` flag. Combined with the TiDB AI settings inspection, this confirms that automatic, approval-only personal Gemini suggestions remain enabled without exposing a key. Vercel’s grouped runtime-error check returned no current production error clusters after the final public-route validation.
 
 ## TiDB Cloud
 
